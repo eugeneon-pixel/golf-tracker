@@ -1,6 +1,6 @@
 const CLUBS=["","Driver","3W","5W","7W","2i","3i","4i","5i","6i","7i","8i","9i","PW","GW","50°","52°","54°","56°","58°","60°","Putter","Other"];
 const $=id=>document.getElementById(id);
-let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null};
+let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null,sgRound:null,sgHole:1,sgReturnView:"homeView",sgRoundIsDraft:false};
 
 function uid(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`}
 function today(){return new Date().toISOString().slice(0,10)}
@@ -15,9 +15,32 @@ function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&l
 
 
 const GOOGLE_SCOPES="openid email profile https://www.googleapis.com/auth/drive.file";
-const ROUND_HEADERS=["Round ID","Date","Course","Holes","Score","To Par","Fairways","FW Opps","FW %","GIR","GIR %","Scrambles Made","Scramble Opps","Scramble %","Putts","3-Putts","Penalties","FW Miss L","FW Miss R","GIR Miss L","GIR Miss R","GIR Miss Short","GIR Miss Long","Synced At","Tee Good","Tee Playable","Tee Trouble","Tee Penalty","Good + Playable %","Destructive Tee %","Avg GIR First Putt (ft)","Avg Missed GIR First Putt (ft)","Schema Version"];
-const HOLE_HEADERS=["Round ID","Date","Course","Hole","Par","Score","Tee Club","Fairway","Tee Quality","Approach Yds","Approach Club","GIR","Approach Miss","1st Putt Dist (ft)","Putts","Scramble","Penalty","Notes","Approach Lie","Approach Proximity (ft)","Miss Leave to Hole (yds)","First Putt Result","Holed Out Off Green","Schema Version"];
-const WORKBOOK_SHEETS=["Rounds","Hole Detail","Master Summary","Scratch Dashboard","Club & Distance Analysis","Driving Analysis","Putting Analysis"];
+const ROUND_HEADERS=["Round ID","Date","Course","Holes","Score","To Par","Fairways","FW Opps","FW %","GIR","GIR %","Scrambles Made","Scramble Opps","Scramble %","Putts","3-Putts","Penalties","FW Miss L","FW Miss R","GIR Miss L","GIR Miss R","GIR Miss Short","GIR Miss Long","Synced At","Tee Good","Tee Playable","Tee Trouble","Tee Penalty","Good + Playable %","Destructive Tee %","Avg GIR First Putt (ft)","Avg Missed GIR First Putt (ft)","Schema Version","SG Enabled","SG Benchmark","SG Complete","SG vs Benchmark"];
+const HOLE_HEADERS=["Round ID","Date","Course","Hole","Par","Score","Tee Club","Fairway","Tee Quality","Approach Yds","Approach Club","GIR","Approach Miss","1st Putt Dist (ft)","Putts","Scramble","Penalty","Notes","Approach Lie","Approach Proximity (ft)","Miss Leave to Hole (yds)","First Putt Result","Holed Out Off Green","Schema Version","Hole Length (yds)","Miss Lie"];
+const SG_HEADERS=["Round ID","Date","Course","Hole","Shot","Start Lie","Distance","Unit","Club","Category","SG vs Tour","Updated At","Benchmark"];
+const WORKBOOK_SHEETS=["Rounds","Hole Detail","Master Summary","Scratch Dashboard","Club & Distance Analysis","Driving Analysis","Putting Analysis","SG Shot Detail","Strokes Gained Summary"];
+
+// Approximate Broadie-style expected-strokes model. Handicap comparisons are round-level
+// benchmark offsets, not proprietary shot-state tables. See README for methodology.
+const SG_LIES=["Tee","Fairway","First Cut","Rough","Bunker","Recovery","Green","Penalty"];
+const SG_BENCHMARKS={
+  "Tour":{ott:0,approach:0,around:0,putting:0,total:0,label:"Tour"},
+  "+2":{ott:-0.5,approach:-0.9,around:-0.3,putting:-0.25,total:-1.95,label:"+2 (estimated)"},
+  "Scratch":{ott:-0.8,approach:-1.5,around:-0.5,putting:-0.4,total:-3.2,label:"Scratch"},
+  "5":{ott:-1.4,approach:-3.0,around:-1.0,putting:-0.8,total:-6.2,label:"5 HCP"},
+  "10":{ott:-2.0,approach:-4.5,around:-1.5,putting:-1.2,total:-9.2,label:"10 HCP"},
+  "15":{ott:-2.7,approach:-6.0,around:-2.0,putting:-1.5,total:-12.2,label:"15 HCP"},
+  "20":{ott:-3.4,approach:-7.5,around:-2.5,putting:-1.8,total:-15.2,label:"20 HCP"}
+};
+const EXPECTED={
+  Green:[[0,0],[1,1],[2,1.01],[3,1.04],[4,1.13],[5,1.23],[6,1.34],[8,1.50],[10,1.61],[15,1.78],[20,1.87],[30,1.98],[40,2.06],[60,2.16],[90,2.30]],
+  Tee:[[80,2.85],[100,2.92],[150,2.99],[200,3.12],[250,3.24],[300,3.40],[350,3.55],[400,3.69],[450,3.86],[500,4.03],[550,4.20],[600,4.38]],
+  Fairway:[[10,2.15],[20,2.40],[40,2.60],[60,2.70],[80,2.75],[100,2.80],[120,2.85],[140,2.91],[160,2.98],[180,3.08],[200,3.19],[220,3.32],[240,3.45],[260,3.58],[280,3.69],[320,3.83]],
+  "First Cut":[[10,2.20],[20,2.45],[40,2.65],[60,2.75],[80,2.82],[100,2.88],[120,2.94],[140,3.01],[160,3.09],[180,3.19],[200,3.31],[220,3.44],[240,3.57],[280,3.82]],
+  Rough:[[10,2.25],[20,2.50],[40,2.70],[60,2.80],[80,2.88],[100,2.95],[120,3.02],[140,3.10],[160,3.19],[180,3.30],[200,3.42],[220,3.55],[240,3.68],[280,3.92]],
+  Bunker:[[10,2.45],[20,2.58],[30,2.70],[40,2.82],[60,3.00],[80,3.15],[100,3.30],[140,3.55],[180,3.82],[220,4.05]],
+  Recovery:[[10,2.55],[20,2.70],[40,2.95],[60,3.15],[80,3.32],[100,3.48],[140,3.75],[180,4.00],[220,4.22],[280,4.55]]
+};
 
 function requireUser(){if(!state.user){alert("Sign in with Google first so this round is stored under the correct user.");return false}return true}
 function migrateLegacyRoundsForFirstUser(){
@@ -79,10 +102,10 @@ async function googleFetch(url,opts={}){
 }
 async function ensureUserSpreadsheet(){
   loadCachedWorkbook();
-  if(state.spreadsheetId){try{await googleFetch(`https://www.googleapis.com/drive/v3/files/${state.spreadsheetId}?fields=id,name,trashed,webViewLink`);return state.spreadsheetId}catch{cacheWorkbook(null,null)}}
+  if(state.spreadsheetId){try{await googleFetch(`https://www.googleapis.com/drive/v3/files/${state.spreadsheetId}?fields=id,name,trashed,webViewLink`);await initializeWorkbook(state.spreadsheetId);return state.spreadsheetId}catch{cacheWorkbook(null,null)}}
   const q=encodeURIComponent("appProperties has { key='golfTrackerVersion' and value='3' } and trashed=false");
   const found=await googleFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name,webViewLink)&pageSize=10`);
-  if(found.files?.length){const f=found.files[0];cacheWorkbook(f.id,f.webViewLink);return f.id}
+  if(found.files?.length){const f=found.files[0];cacheWorkbook(f.id,f.webViewLink);await initializeWorkbook(f.id);return f.id}
   const label=(state.user?.name||state.user?.email||"User").replace(/[\\/:*?\"<>|]/g," ").trim();
   const name=`${config().SPREADSHEET_NAME||"Golf Performance Tracker"} - ${label}`;
   const f=await googleFetch("https://www.googleapis.com/drive/v3/files?fields=id,name,webViewLink",{method:"POST",body:JSON.stringify({name,mimeType:"application/vnd.google-apps.spreadsheet",parents:["root"],appProperties:{golfTrackerVersion:"3"}})});
@@ -95,21 +118,38 @@ async function initializeWorkbook(id){
   const existing=new Set(meta.sheets.map(s=>s.properties.title));existing.add("Rounds");
   WORKBOOK_SHEETS.slice(1).forEach(title=>{if(!existing.has(title))requests.push({addSheet:{properties:{title,gridProperties:{frozenRowCount:1}}}})});
   if(requests.length)await googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}:batchUpdate`,{method:"POST",body:JSON.stringify({requests})});
-  await writeValues(id,"Rounds!A1",[ROUND_HEADERS]);await writeValues(id,"Hole Detail!A1",[HOLE_HEADERS]);
+  await writeValues(id,"Rounds!A1",[ROUND_HEADERS]);await writeValues(id,"Hole Detail!A1",[HOLE_HEADERS]);await writeValues(id,"SG Shot Detail!A1",[SG_HEADERS]);
   await refreshWorkbookAnalytics(id);
 }
 async function writeValues(id,range,values){return googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{method:"PUT",body:JSON.stringify({range,majorDimension:"ROWS",values})})}
 async function appendValues(id,range,values){return googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({majorDimension:"ROWS",values})})}
 async function getValues(id,range){const j=await googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}`);return j.values||[]}
-function roundRow(r){const s=r.summary||summary(r);return [r.id,r.date,r.course,r.holesCount,s.score,s.toPar,s.fairways,s.fwOpp,s.fwPct,s.gir,s.girPct,s.scrambleMade,s.scrambleOpp,s.scramblePct,s.putts,s.threePutts,s.penalties,s.fwL,s.fwR,s.missLeft,s.missRight,s.missShort,s.missLong,new Date().toISOString(),s.teeGood||0,s.teePlayable||0,s.teeTrouble||0,s.teePenalty||0,s.goodPlayablePct||0,s.destructivePct||0,s.avgGirFirstPutt??"",s.avgMissFirstPutt??"",3]}
-function holeRows(r){return (r.holesData||[]).map(h=>[r.id,r.date,r.course,h.hole,h.par,h.score,h.teeClub,h.fairway,h.teeQuality,h.approachYds,h.approachClub,h.gir,h.approachMiss,h.firstPutt,h.putts,h.scramble,h.penalty,h.notes,h.approachLie,h.approachProximityFt,h.missLeaveYds,h.firstPuttResult,!!h.holeOut,3])}
+function roundRow(r){const s=r.summary||summary(r),sg=sgSummary(r);return [r.id,r.date,r.course,r.holesCount,s.score,s.toPar,s.fairways,s.fwOpp,s.fwPct,s.gir,s.girPct,s.scrambleMade,s.scrambleOpp,s.scramblePct,s.putts,s.threePutts,s.penalties,s.fwL,s.fwR,s.missLeft,s.missRight,s.missShort,s.missLong,new Date().toISOString(),s.teeGood||0,s.teePlayable||0,s.teeTrouble||0,s.teePenalty||0,s.goodPlayablePct||0,s.destructivePct||0,s.avgGirFirstPutt??"",s.avgMissFirstPutt??"",4,!!r.sg?.enabled,r.sg?.benchmark||"",r.sg?.enabled?sg.complete:false,r.sg?.enabled&&sg.complete?sg.vsBenchmark.total:""]}
+function holeRows(r){return (r.holesData||[]).map(h=>[r.id,r.date,r.course,h.hole,h.par,h.score,h.teeClub,h.fairway,h.teeQuality,h.approachYds,h.approachClub,h.gir,h.approachMiss,h.firstPutt,h.putts,h.scramble,h.penalty,h.notes,h.approachLie,h.approachProximityFt,h.missLeaveYds,h.firstPuttResult,!!h.holeOut,4,h.holeLengthYds??"",h.missLie||""])}
 async function spreadsheetHasRound(id,roundId){const ids=await getValues(id,"Rounds!A2:A");return ids.some(r=>r[0]===roundId)}
+async function clearValues(id,range){return googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}:clear`,{method:"POST",body:"{}"})}
+function colLetter(n){let s="";while(n){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26)}return s}
+async function upsertByRoundId(id,sheet,headers,rowValues,roundId){
+  const ids=await getValues(id,`${sheet}!A2:A`);const matches=[];ids.forEach((r,i)=>{if(r[0]===roundId)matches.push(i+2)});
+  if(matches.length){await writeValues(id,`${sheet}!A${matches[0]}:${colLetter(headers.length)}${matches[0]}`,[rowValues]);return matches[0]}
+  await appendValues(id,`${sheet}!A:${colLetter(headers.length)}`,[rowValues]);return null;
+}
+async function upsertHoleRows(id,round){
+  const ids=await getValues(id,"Hole Detail!A2:A"),matches=[];ids.forEach((r,i)=>{if(r[0]===round.id)matches.push(i+2)});const rows=holeRows(round);
+  for(let i=0;i<rows.length;i++){if(matches[i])await writeValues(id,`Hole Detail!A${matches[i]}:Z${matches[i]}`,[rows[i]]);else await appendValues(id,"Hole Detail!A:Z",[rows[i]])}
+  for(let i=rows.length;i<matches.length;i++)await clearValues(id,`Hole Detail!A${matches[i]}:Z${matches[i]}`);
+}
+async function syncSgRows(id,round){
+  const ids=await getValues(id,"SG Shot Detail!A2:A"),matches=[];ids.forEach((r,i)=>{if(r[0]===round.id)matches.push(i+2)});const sg=sgShotRows(round);
+  for(let i=0;i<sg.length;i++){if(matches[i])await writeValues(id,`SG Shot Detail!A${matches[i]}:M${matches[i]}`,[sg[i]]);else await appendValues(id,"SG Shot Detail!A:M",[sg[i]])}
+  for(let i=sg.length;i<matches.length;i++)await clearValues(id,`SG Shot Detail!A${matches[i]}:M${matches[i]}`);
+}
 async function syncOne(round,{refresh=true}={}){
   if(!requireUser())throw new Error("Sign in first.");if(!state.accessToken)throw new Error("Tap Sign in with Google to authorize spreadsheet sync.");
   await ensureUserSpreadsheet();
-  if(!(await spreadsheetHasRound(state.spreadsheetId,round.id))){await appendValues(state.spreadsheetId,"Rounds!A:AG",[roundRow(round)]);await appendValues(state.spreadsheetId,"Hole Detail!A:X",holeRows(round))}
+  await upsertByRoundId(state.spreadsheetId,"Rounds",ROUND_HEADERS,roundRow(round),round.id);await upsertHoleRows(state.spreadsheetId,round);await syncSgRows(state.spreadsheetId,round);
   let rounds=getRounds();const i=rounds.findIndex(r=>r.id===round.id);if(i>=0){rounds[i].synced=true;rounds[i].syncedAt=new Date().toISOString();rounds[i].syncedSpreadsheetId=state.spreadsheetId;setRounds(rounds)}
-  if(refresh)await refreshWorkbookAnalytics(state.spreadsheetId);return {ok:true,id:round.id};
+  if(refresh){await refreshWorkbookAnalytics(state.spreadsheetId);await refreshSgWorkbookSummary(state.spreadsheetId)}return {ok:true,id:round.id};
 }
 async function syncAll({silent=false}={}){
   if(!requireUser())return;const pending=getRounds().filter(r=>r.syncedSpreadsheetId!==state.spreadsheetId);
@@ -120,11 +160,11 @@ async function syncAll({silent=false}={}){
 
 function show(view){document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));$(view).classList.add("active");window.scrollTo({top:0,behavior:"instant"})}
 function populateClubs(){["teeClub","approachClub"].forEach(id=>$(id).innerHTML=CLUBS.map(c=>`<option>${c}</option>`).join(""))}
-function blankHole(n){return {hole:n,par:4,score:"",penalty:0,teeClub:"",fairway:"",teeQuality:"",approachYds:"",approachClub:"",approachLie:"",gir:"",approachMiss:"",approachProximityFt:"",missLeaveYds:"",firstPutt:"",putts:"",scramble:"",firstPuttResult:"",holeOut:false,notes:"",saved:false}}
+function blankHole(n){return {hole:n,par:4,score:"",penalty:0,holeLengthYds:"",teeClub:"",fairway:"",teeQuality:"",approachYds:"",approachClub:"",approachLie:"",gir:"",approachMiss:"",approachProximityFt:"",missLeaveYds:"",missLie:"",firstPutt:"",putts:"",scramble:"",firstPuttResult:"",holeOut:false,notes:"",saved:false}}
 
 function startRound(holes){
   state.holes=holes;state.current=1;
-  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:3,holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
+  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:4,sg:{enabled:false,benchmark:"Scratch",holes:{}},holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
   $("roundDate").value=state.round.date;$("course").value="";$("holesCount").value=holes;$("roundPar").value=state.round.roundPar;
   loadHole(1);show("roundView");
 }
@@ -132,17 +172,17 @@ function readRoundHeader(){state.round.date=$("roundDate").value;state.round.cou
 function selectedSegment(target){const el=document.querySelector(`.segmented[data-target="${target}"] button.active`);return el?el.dataset.value:""}
 function setSegment(target,val){document.querySelectorAll(`.segmented[data-target="${target}"] button`).forEach(b=>b.classList.toggle("active",b.dataset.value===val))}
 function currentForm(){return {
-  hole:state.current,par:Number($("par").value)||0,score:$("score").value===""?"":Number($("score").value),penalty:Number($("penalty").value)||0,
+  hole:state.current,par:Number($("par").value)||0,score:$("score").value===""?"":Number($("score").value),penalty:Number($("penalty").value)||0,holeLengthYds:$("holeLengthYds").value===""?"":Number($("holeLengthYds").value),
   teeClub:$("teeClub").value,fairway:selectedSegment("fairway"),teeQuality:selectedSegment("teeQuality"),
   approachYds:$("approachYds").value===""?"":Number($("approachYds").value),approachClub:$("approachClub").value,approachLie:$("approachLie").value,
-  gir:selectedSegment("gir"),approachMiss:$("approachMiss").value,approachProximityFt:$("approachProximityFt").value===""?"":Number($("approachProximityFt").value),missLeaveYds:$("missLeaveYds").value===""?"":Number($("missLeaveYds").value),
+  gir:selectedSegment("gir"),approachMiss:$("approachMiss").value,approachProximityFt:$("approachProximityFt").value===""?"":Number($("approachProximityFt").value),missLeaveYds:$("missLeaveYds").value===""?"":Number($("missLeaveYds").value),missLie:$("missLie").value,
   firstPutt:$("firstPutt").value===""?"":Number($("firstPutt").value),putts:$("putts").value===""?"":Number($("putts").value),scramble:$("scramble").value,
   firstPuttResult:$("firstPuttResult").value,holeOut:$("holeOut").checked,notes:$("notes").value.trim(),saved:true
 }}
 
 function applySmartDefaults(h){
   if(h.par===3){h.fairway="N/A";if(!h.approachLie)h.approachLie="Tee"}
-  if(h.gir==="Hit"){h.approachMiss="Hit";h.scramble="N/A";h.missLeaveYds=""}
+  if(h.gir==="Hit"){h.approachMiss="Hit";h.scramble="N/A";h.missLeaveYds="";h.missLie="";if(h.approachProximityFt!==""&&h.approachProximityFt!=null)h.firstPutt=Number(h.approachProximityFt)}
   if(h.gir==="Miss"){h.approachProximityFt="";if(h.scramble==="N/A")h.scramble=""}
   if(h.holeOut){h.putts=0;h.firstPutt="";h.firstPuttResult=""}
   if(Number(h.putts)===1 && !h.holeOut && !h.firstPuttResult)h.firstPuttResult="Holed";
@@ -160,6 +200,7 @@ function validateHole(h,{finishing=false}={}){
   if(h.gir==="Hit" && h.approachMiss && h.approachMiss!=="Hit")errors.push("GIR is Hit but approach result is a miss. Choose one consistent result.");
   if(h.gir==="Miss" && h.approachMiss==="Hit")errors.push("GIR is Miss but approach result is Hit.");
   if(h.gir==="Miss" && !h.scramble)warnings.push("Scramble result is blank on a missed green.");
+  if(h.gir==="Miss" && h.missLeaveYds!=="" && !h.missLie)warnings.push("Miss lie is blank; SG enrichment can add it later.");
   if(h.gir==="Hit" && h.scramble && h.scramble!=="N/A")errors.push("Scrambling should be N/A when GIR is hit.");
   if(h.putts===0 && !h.holeOut)errors.push("Zero putts requires ‘Holed out from off the green’.");
   if(h.holeOut && h.putts!==0)errors.push("An off-green hole-out should have 0 putts.");
@@ -182,9 +223,9 @@ function saveCurrentHole({silent=false}={}){
 }
 function loadHole(n){
   state.current=n;$("holeNumber").textContent=n;const h=state.round.holesData[n-1]||blankHole(n);
-  $("par").value=h.par;$("score").value=h.score;$("penalty").value=h.penalty;$("teeClub").value=h.teeClub;setSegment("fairway",h.fairway);setSegment("teeQuality",h.teeQuality);
+  $("par").value=h.par;$("score").value=h.score;$("penalty").value=h.penalty;$("holeLengthYds").value=h.holeLengthYds??"";$("teeClub").value=h.teeClub;setSegment("fairway",h.fairway);setSegment("teeQuality",h.teeQuality);
   $("approachYds").value=h.approachYds;$("approachClub").value=h.approachClub;$("approachLie").value=h.approachLie||"";setSegment("gir",h.gir);$("approachMiss").value=h.approachMiss;
-  $("approachProximityFt").value=h.approachProximityFt??"";$("missLeaveYds").value=h.missLeaveYds??"";$("firstPutt").value=h.firstPutt;$("putts").value=h.putts;$("scramble").value=h.scramble;
+  $("approachProximityFt").value=h.approachProximityFt??"";$("missLeaveYds").value=h.missLeaveYds??"";$("missLie").value=h.missLie||"";$("firstPutt").value=h.firstPutt;$("putts").value=h.putts;$("scramble").value=h.scramble;
   $("firstPuttResult").value=h.firstPuttResult||"";$("holeOut").checked=!!h.holeOut;$("notes").value=h.notes;$("holeStatus").textContent=h.saved?"Saved":"Not saved";
   $("prevHole").disabled=n===1;$("nextHole").disabled=n===state.holes;showValidation({errors:[],warnings:[]});updateConditionalFields();renderProgress();
 }
@@ -192,8 +233,9 @@ function renderProgress(){
   $("progressDots").innerHTML=state.round.holesData.map((h,i)=>`<span class="progress-dot ${h.saved?"complete":""} ${i===state.current-1?"current":""}"></span>`).join("");
 }
 function updateConditionalFields(){
-  const gir=selectedSegment("gir");$("girProximityWrap").classList.toggle("hidden",gir!=="Hit");$("missLeaveWrap").classList.toggle("hidden",gir!=="Miss");
-  if(gir==="Hit"){$("approachMiss").value="Hit";$("scramble").value="N/A"}
+  const gir=selectedSegment("gir");$("girProximityWrap").classList.toggle("hidden",gir!=="Hit");$("missLeaveWrap").classList.toggle("hidden",gir!=="Miss");$("missLieWrap").classList.toggle("hidden",gir!=="Miss");
+  if(gir==="Hit"){$("approachMiss").value="Hit";$("scramble").value="N/A";if($("approachProximityFt").value!=="")$("firstPutt").value=$("approachProximityFt").value}
+  $("firstPutt").readOnly=gir==="Hit";
   const ho=$("holeOut").checked;if(ho){$("putts").value=0;$("firstPutt").value="";$("firstPuttResult").value=""}
 }
 
@@ -222,11 +264,14 @@ function renderSummary(round){
   if(s.girPct<.5)signals.push(["amber",`GIR is ${pct(s.girPct)}; approach dispersion remains an improvement area.`]);else signals.push(["green",`GIR is ${pct(s.girPct)} for this round.`]);
   if(s.scramblePct>=.5)signals.push(["green",`Scrambling at ${pct(s.scramblePct)} protected the score.`]);
   $("roundSignals").innerHTML=`<h3>Round signals</h3>${signals.map(([c,t])=>`<div class="signal ${c}">${esc(t)}</div>`).join("")}`;
+  const sg=sgSummary(round);$("summarySg").innerHTML=round.sg?.enabled&&sg.complete?`<div class="signal green"><strong>SG vs ${esc(round.sg.benchmark||"Scratch")}: ${signed1(sg.vsBenchmark.total)}</strong><br><span class="muted">OTT ${signed1(sg.vsBenchmark.ott)} • APP ${signed1(sg.vsBenchmark.approach)} • ARG ${signed1(sg.vsBenchmark.around)} • PUTT ${signed1(sg.vsBenchmark.putting)} • PEN ${signed1(sg.tour.penalty)}</span></div>`:`<p class="muted">Strokes Gained details can be added now or later.</p>`;
 }
 function renderHome(){
   const rounds=getRounds(),syncedId=state.spreadsheetId;
   $("roundCount").textContent=rounds.length;$("unsyncedCount").textContent=rounds.filter(r=>r.syncedSpreadsheetId!==syncedId).length;
-  $("recentRounds").innerHTML=rounds.slice(0,5).map(r=>{const ss=r.summary||summary(r),ok=!!syncedId&&r.syncedSpreadsheetId===syncedId;return `<div class="recent-item"><div><strong>${esc(r.course||"Unnamed course")}</strong><div class="muted">${esc(r.date)} • ${r.holesCount} holes</div></div><div style="text-align:right"><strong>${ss.score} (${ss.toPar>=0?"+":""}${ss.toPar})</strong><div class="badge ${ok?"":"unsynced"}">${ok?"Synced":"Unsynced"}</div></div></div>`}).join("")||`<p class="muted">${state.user?"No rounds yet.":"Sign in to start your personal round history."}</p>`;
+  $("recentRounds").innerHTML=rounds.slice(0,8).map(r=>{const ss=r.summary||summary(r),ok=!!syncedId&&r.syncedSpreadsheetId===syncedId,sg=sgSummary(r);return `<div class="recent-item"><div><strong>${esc(r.course||"Unnamed course")}</strong><div class="muted">${esc(r.date)} • ${r.holesCount} holes</div><div class="round-actions"><button class="mini-action" data-edit-round="${r.id}">Edit</button><button class="mini-action sg-action" data-sg-round="${r.id}">${r.sg?.enabled?(sg.complete?"SG ✓":"Complete SG"):"Add SG"}</button></div></div><div style="text-align:right"><strong>${ss.score} (${ss.toPar>=0?"+":""}${ss.toPar})</strong><div class="badge ${ok?"":"unsynced"}">${ok?"Synced":"Unsynced"}</div>${r.sg?.enabled&&sg.complete?`<div class="muted">SG ${signed1(sg.vsBenchmark.total)} vs ${esc(r.sg.benchmark||"Scratch")}</div>`:""}</div></div>`}).join("")||`<p class="muted">${state.user?"No rounds yet.":"Sign in to start your personal round history."}</p>`;
+  document.querySelectorAll("[data-sg-round]").forEach(b=>b.onclick=()=>openSgRound(b.dataset.sgRound));
+  document.querySelectorAll("[data-edit-round]").forEach(b=>b.onclick=()=>editSavedRound(b.dataset.editRound));
   renderAuth();
 }
 
@@ -269,6 +314,7 @@ async function refreshWorkbookAnalytics(id){
   const teeMap={};objects.forEach(r=>{const c=r["Tee Club"];if(c)(teeMap[c]||(teeMap[c]=[])).push(r)});const driveRows=Object.entries(teeMap).map(([c,x])=>{const opp=x.filter(r=>Number(r.Par)>3),fw=opp.filter(r=>r.Fairway==="Hit").length,g=x.filter(r=>r["Tee Quality"]==="Good").length,p=x.filter(r=>r["Tee Quality"]==="Playable").length,t=x.filter(r=>r["Tee Quality"]==="Trouble").length,pen=x.filter(r=>r["Tee Quality"]==="Penalty").length;return[c,x.length,fw,opp.length?fw/opp.length:0,g,p,t,pen,x.length?(t+pen)/x.length:0,avgNum(x.map(r=>Number(r.Score)-Number(r.Par)))]});
   await writeValues(id,"Driving Analysis!A1",[["Tee Club","Shots","Fairways","FW %","Good","Playable","Trouble","Penalty","Destructive %","Avg Score to Par"],...driveRows]);
   await writeValues(id,"Putting Analysis!A1",[["First Putt Band","Attempts","Holed","Make %","3-Putts"],...d.puttingBands.map(x=>[x.band,x.putts,x.made,x.makePct,x.threePutts])]);
+  await refreshSgWorkbookSummary(id);
 }
 function avgNum(xs){const a=xs.map(Number).filter(Number.isFinite);return a.length?a.reduce((x,y)=>x+y,0)/a.length:0}
 function renderDashboard(d){
@@ -283,12 +329,55 @@ function renderDashboard(d){
 }
 async function openDashboard(){show("dashboardView");renderDashboard(localDashboard());try{const remote=await fetchDashboard();if(remote)renderDashboard(remote)}catch(e){$("dashboardSource").textContent+=` • spreadsheet refresh unavailable`}}
 
+
+function signed1(n){n=Number(n)||0;return `${n>=0?"+":""}${n.toFixed(1)}`}
+function interp(points,x){x=Math.max(0,Number(x)||0);if(x<=points[0][0])return points[0][1];for(let i=1;i<points.length;i++){if(x<=points[i][0]){const[a,av]=points[i-1],[b,bv]=points[i];return av+(bv-av)*(x-a)/(b-a)}}const[a,av]=points[points.length-2],[b,bv]=points[points.length-1];return bv+(bv-av)*(x-b)/(b-a)}
+function expectedStrokes(lie,distance){if(lie==="Penalty")return null;const table=EXPECTED[lie]||EXPECTED.Rough;return interp(table,Number(distance)||0)}
+function sgCategory(shot,index,hole){if(shot.lie==="Penalty")return "penalty";if(shot.lie==="Green")return "putting";if(index===0&&Number(hole.par)>3&&shot.lie==="Tee")return "ott";const yd=shot.unit==="ft"?(Number(shot.distance)||0)/3:Number(shot.distance)||0;return yd<=50?"around":"approach"}
+function calculateHoleSg(hole,sgHole){const shots=sgHole?.shots||[];const out=[];for(let i=0;i<shots.length;i++){const sh=shots[i],cat=sgCategory(sh,i,hole);let sg;if(sh.lie==="Penalty")sg=-1;else{const start=expectedStrokes(sh.lie,sh.distance);let j=i+1;while(j<shots.length&&shots[j].lie==="Penalty")j++;const next=shots[j];const end=next?expectedStrokes(next.lie,next.distance):0;sg=start-end-1}out.push({...sh,category:cat,sg:Number.isFinite(sg)?sg:0})}return out}
+function sgSummary(round){const cats={ott:0,approach:0,around:0,putting:0,penalty:0,total:0},missing=[];if(!round.sg?.enabled)return {complete:false,tour:cats,vsBenchmark:{...cats},missing:["SG not enabled"]};
+  for(const h of round.holesData||[]){const sh=round.sg.holes?.[h.hole]?.shots||[];if(!h.score||sh.length!==Number(h.score)||sh.some(x=>x.lie!=="Penalty"&&(x.distance===""||!x.lie)))missing.push(h.hole);calculateHoleSg(h,round.sg.holes?.[h.hole]).forEach(x=>{cats[x.category]+=x.sg;cats.total+=x.sg})}
+  const b=SG_BENCHMARKS[round.sg.benchmark||"Scratch"]||SG_BENCHMARKS.Scratch,scale=(round.holesCount||18)/18;const vs={};["ott","approach","around","putting"].forEach(k=>vs[k]=cats[k]-b[k]*scale);vs.penalty=cats.penalty;vs.total=cats.total-b.total*scale;return {complete:missing.length===0,tour:cats,vsBenchmark:vs,missing,benchmark:b};
+}
+function seedSgHole(round,h){const count=Math.max(0,Number(h.score)||0),shots=Array.from({length:count},()=>({lie:"",distance:"",unit:"yd",club:""}));if(!count)return {shots};let cursor=0;shots[0]={lie:"Tee",distance:h.holeLengthYds||"",unit:"yd",club:h.teeClub||""};
+  // Seed known pre-shot states without guessing unknown intermediate distances.
+  if(h.par>3&&h.approachYds!==""&&count>1){cursor=1;shots[cursor]={lie:h.approachLie||"Fairway",distance:h.approachYds,unit:"yd",club:h.approachClub||""}}
+  else if(h.par===3&&h.approachYds!==""){shots[0]={lie:"Tee",distance:h.approachYds,unit:"yd",club:h.approachClub||h.teeClub||""};cursor=0}
+  if(h.gir==="Hit"&&Number(h.firstPutt)>0&&cursor+1<count){shots[cursor+1]={lie:"Green",distance:Number(h.firstPutt),unit:"ft",club:"Putter"}}
+  if(h.gir==="Miss"&&h.missLeaveYds!==""&&cursor+1<count){shots[cursor+1]={lie:h.missLie||"",distance:h.missLeaveYds,unit:"yd",club:""};if(Number(h.firstPutt)>0&&cursor+2<count)shots[cursor+2]={lie:"Green",distance:Number(h.firstPutt),unit:"ft",club:"Putter"}}
+  // Fill remaining known putt rows as Green but leave distance blank for later enrichment.
+  let firstGreen=shots.findIndex(x=>x.lie==="Green");if(firstGreen>=0)for(let i=firstGreen+1;i<count;i++)if(!shots[i].lie)shots[i]={lie:"Green",distance:"",unit:"ft",club:"Putter"};
+  return {shots};
+}
+function ensureSg(round){round.sg=round.sg||{enabled:true,benchmark:"Scratch",holes:{}};round.sg.enabled=true;round.sg.benchmark=round.sg.benchmark||"Scratch";round.sg.holes=round.sg.holes||{};(round.holesData||[]).forEach(h=>{if(!round.sg.holes[h.hole])round.sg.holes[h.hole]=seedSgHole(round,h)});return round.sg}
+function openSgRound(id){const r=getRounds().find(x=>x.id===id);if(!r)return;ensureSg(r);state.sgRound=r;state.sgRoundIsDraft=false;state.sgReturnView="homeView";state.sgHole=1;$("sgBenchmark").value=r.sg.benchmark||"Scratch";renderSgHole();renderSgHeader();show("sgView")}
+function openSgDuringRound(){if(!state.round)return;if(!saveCurrentHole({silent:true}))return;ensureSg(state.round);state.sgRound=state.round;state.sgRoundIsDraft=true;state.sgReturnView="roundView";state.sgHole=state.current;$("sgBenchmark").value=state.round.sg.benchmark||"Scratch";renderSgHole();renderSgHeader();show("sgView")}
+function renderSgHeader(){const r=state.sgRound,s=sgSummary(r);$("sgRoundTitle").textContent=`${r.course||"Unnamed course"} • ${r.date}`;$("sgStatus").textContent=s.complete?`Complete • SG ${signed1(s.vsBenchmark.total)} vs ${r.sg.benchmark}`:`Needs detail on ${s.missing.length} hole(s)`;$("sgPrevHole").disabled=state.sgHole===1;$("sgNextHole").disabled=state.sgHole===r.holesCount}
+function renderSgHole(){const r=state.sgRound,h=r.holesData[state.sgHole-1],data=r.sg.holes[h.hole]||seedSgHole(r,h);r.sg.holes[h.hole]=data;$("sgHoleNumber").textContent=h.hole;$("sgHoleMeta").textContent=`Par ${h.par} • Score ${h.score} • ${data.shots.length} stroke${data.shots.length===1?"":"s"}`;
+  $("sgShotList").innerHTML=data.shots.map((sh,i)=>{const unit=sh.lie==="Green"?"ft":"yd";sh.unit=unit;return `<div class="sg-shot-row"><div class="sg-shot-label"><strong>${i+1}</strong><span>${esc(sgCategory(sh,i,h).replace("ott","Off tee").replace("approach","Approach").replace("around","Around green").replace("putting","Putting").replace("penalty","Penalty"))}</span></div><div class="grid2"><div class="field"><label>Start lie</label><select data-sg-lie="${i}">${["",...SG_LIES].map(x=>`<option ${x===sh.lie?"selected":""}>${x}</option>`).join("")}</select></div><div class="field sg-distance-field ${sh.lie==="Penalty"?"hidden":""}" data-sg-distance-wrap="${i}"><label>Distance to hole (${unit})</label><input data-sg-distance="${i}" type="number" inputmode="decimal" value="${sh.distance??""}"></div></div><div class="field ${sh.lie==="Penalty"?"hidden":""}" data-sg-club-wrap="${i}"><label>Club (optional)</label><select data-sg-club="${i}">${CLUBS.map(c=>`<option ${c===sh.club?"selected":""}>${c}</option>`).join("")}</select></div></div>`}).join("");
+  document.querySelectorAll("[data-sg-lie]").forEach(el=>el.onchange=()=>{const i=Number(el.dataset.sgLie),sh=data.shots[i];sh.lie=el.value;sh.unit=sh.lie==="Green"?"ft":"yd";if(sh.lie==="Penalty"){sh.distance="";sh.club=""}renderSgHole();renderSgHeader()});document.querySelectorAll("[data-sg-distance]").forEach(el=>el.oninput=()=>{data.shots[Number(el.dataset.sgDistance)].distance=el.value===""?"":Number(el.value);renderSgHeader()});document.querySelectorAll("[data-sg-club]").forEach(el=>el.onchange=()=>data.shots[Number(el.dataset.sgClub)].club=el.value);
+  const calc=calculateHoleSg(h,data),total=calc.reduce((a,x)=>a+x.sg,0);$("sgHoleResult").innerHTML=`<strong>SG vs Tour: ${signed1(total)}</strong><div class="muted">${calc.map((x,i)=>`#${i+1} ${signed1(x.sg)}`).join(" • ")}</div>`;
+}
+function saveSgRound({silent=false}={}){const r=state.sgRound;r.sg.benchmark=$("sgBenchmark").value;r.sg.updatedAt=new Date().toISOString();r.synced=false;r.syncedSpreadsheetId=null;if(state.sgRoundIsDraft){state.round=r;localStorage.setItem(`golfDraft:${state.user?.sub||"guest"}`,JSON.stringify(r))}else{let rounds=getRounds(),i=rounds.findIndex(x=>x.id===r.id);if(i>=0)rounds[i]=r;setRounds(rounds);state.lastSavedId=r.id;renderHome()}renderSgHeader();if(!silent)alert("Strokes Gained details saved. You can return and add or change them at any time.")}
+function editSavedRound(id){const r=getRounds().find(x=>x.id===id);if(!r)return;state.round=JSON.parse(JSON.stringify(r));state.holes=r.holesCount;state.current=1;state.round.holesData=state.round.holesData.map((h,i)=>({...blankHole(i+1),...h}));$("roundDate").value=r.date;$("course").value=r.course;$("holesCount").value=r.holesCount;$("roundPar").value=r.roundPar||r.holesData.reduce((a,h)=>a+Number(h.par||0),0);loadHole(1);show("roundView")}
+function sgShotRows(r){if(!r.sg?.enabled)return[];const rows=[];(r.holesData||[]).forEach(h=>calculateHoleSg(h,r.sg.holes?.[h.hole]).forEach((sh,i)=>rows.push([r.id,r.date,r.course,h.hole,i+1,sh.lie,sh.distance,sh.unit,sh.club,sh.category,sh.sg,new Date().toISOString(),r.sg.benchmark||"Scratch"])));return rows}
+function renderSgSummaryCard(round){const s=sgSummary(round);return s.complete?`SG ${signed1(s.vsBenchmark.total)} vs ${esc(round.sg.benchmark)}`:`SG incomplete`}
+async function refreshSgWorkbookSummary(id){
+  const rv=await getValues(id,"Rounds!A:AK"),sv=await getValues(id,"SG Shot Detail!A:M");
+  const rows=rv.length>1?rv.slice(1):[],roundMeta={};rows.forEach(r=>{if(r[0])roundMeta[r[0]]={date:r[1]||"",course:r[2]||"",holes:Number(r[3])||18,enabled:String(r[33]).toLowerCase()==="true",benchmark:r[34]||"Scratch",complete:String(r[35]).toLowerCase()==="true"}});
+  const groups={};if(sv.length>1)sv.slice(1).forEach(r=>{const id0=r[0];if(!id0)return;const g=groups[id0]||(groups[id0]={ott:0,approach:0,around:0,putting:0,penalty:0,total:0,benchmark:r[12]||roundMeta[id0]?.benchmark||"Scratch"});const cat=r[9]||"approach",val=Number(r[10])||0;if(g[cat]!==undefined)g[cat]+=val;g.total+=val});
+  const out=[["Round ID","Date","Course","Benchmark","Complete","SG vs Tour","SG vs Benchmark","Off Tee vs Benchmark","Approach vs Benchmark","Around Green vs Benchmark","Putting vs Benchmark","Penalty SG"]];
+  Object.entries(roundMeta).filter(([,m])=>m.enabled).forEach(([rid,m])=>{const g=groups[rid]||{ott:0,approach:0,around:0,putting:0,penalty:0,total:0,benchmark:m.benchmark},b=SG_BENCHMARKS[m.benchmark]||SG_BENCHMARKS.Scratch,scale=m.holes/18;out.push([rid,m.date,m.course,m.benchmark,m.complete,g.total,g.total-b.total*scale,g.ott-b.ott*scale,g.approach-b.approach*scale,g.around-b.around*scale,g.putting-b.putting*scale,g.penalty])});
+  await writeValues(id,"Strokes Gained Summary!A1",out)
+}
+
 // Events
 document.querySelectorAll("[data-holes]").forEach(b=>b.addEventListener("click",()=>startRoundGuarded(Number(b.dataset.holes))));
 document.querySelectorAll(".segmented button").forEach(b=>b.addEventListener("click",()=>{b.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("active"));b.classList.add("active");updateConditionalFields()}));
 $("par").addEventListener("change",()=>{if(Number($("par").value)===3){setSegment("fairway","N/A");if(!$("approachLie").value)$("approachLie").value="Tee"}});
 $("putts").addEventListener("change",()=>{const p=Number($("putts").value);if(p===1)$("firstPuttResult").value="Holed";if(p>=2&&$("firstPuttResult").value==="Holed")$("firstPuttResult").value=""});
 $("holeOut").addEventListener("change",updateConditionalFields);
+$("approachProximityFt").addEventListener("input",()=>{if(selectedSegment("gir")==="Hit")$("firstPutt").value=$("approachProximityFt").value});
 $("prevHole").onclick=()=>{if(saveCurrentHole()&&state.current>1)loadHole(state.current-1)};
 $("nextHole").onclick=()=>{if(saveCurrentHole()&&state.current<state.holes)loadHole(state.current+1)};
 $("saveHole").onclick=()=>{if(saveCurrentHole()&&state.current<state.holes)loadHole(state.current+1);else if(state.current===state.holes)alert("Final hole saved. Tap Finish round when ready.")};
@@ -301,6 +390,8 @@ $("switchAccount").onclick=()=>{state.accessToken=null;state.user=null;state.spr
 $("openSpreadsheet").onclick=()=>{if(state.spreadsheetUrl)window.open(state.spreadsheetUrl,"_blank")};
 $("syncBtn").onclick=()=>syncAll().catch(e=>{alert(e.message);if(!state.accessToken)requestGoogleAccess()});
 $("syncRound").onclick=async()=>{try{const r=getRounds().find(x=>x.id===state.lastSavedId);if(r){await syncOne(r);renderHome();alert("Round synced to your personal spreadsheet.")}}catch(e){alert(e.message);if(!state.accessToken)requestGoogleAccess()}};
+$("addSgFromSummary").onclick=()=>{const id=state.lastSavedId||state.round?.id;if(id)openSgRound(id)};$("sgDuringRound").onclick=openSgDuringRound;
+$("sgBack").onclick=()=>{saveSgRound({silent:true});if(state.sgReturnView==="roundView"){loadHole(state.current);show("roundView")}else{renderHome();show("homeView")}};$("sgSave").onclick=saveSgRound;$("sgSaveBottom").onclick=saveSgRound;$("sgBenchmark").onchange=()=>{state.sgRound.sg.benchmark=$("sgBenchmark").value;renderSgHeader();renderSgHole()};$("sgPrevHole").onclick=()=>{if(state.sgHole>1){state.sgHole--;renderSgHole();renderSgHeader()}};$("sgNextHole").onclick=()=>{if(state.sgHole<state.sgRound.holesCount){state.sgHole++;renderSgHole();renderSgHeader()}};
 $("openDashboard").onclick=openDashboard;$("dashboardBack").onclick=()=>{renderHome();show("homeView")};$("refreshDashboard").onclick=async()=>{try{renderDashboard((await fetchDashboard())||localDashboard())}catch(e){alert(e.message)}};
 
 populateClubs();

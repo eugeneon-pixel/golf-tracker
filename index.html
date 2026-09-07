@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker</title>
+  <title>Golf Tracker v4</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -89,9 +89,11 @@
       </div>
 
       <div class="progress-dots" id="progressDots"></div>
+      <button id="sgDuringRound" class="secondary big sg-on-course">SG Mode — add shot detail on course</button>
 
       <div class="card">
-        <div class="grid3">
+        <div class="grid2">
+          <div class="field"><label>Hole length (yds)</label><input id="holeLengthYds" type="number" inputmode="numeric" placeholder="Useful for SG"></div>
           <div class="field"><label>Par</label><select id="par"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></div>
           <div class="field"><label>Score</label><input id="score" type="number" inputmode="numeric"></div>
           <div class="field"><label>Penalty shots</label><input id="penalty" type="number" inputmode="numeric" value="0"></div>
@@ -117,8 +119,9 @@
         <label class="mini-label">Green in regulation</label>
         <div class="segmented two" data-target="gir"><button data-value="Hit">GIR</button><button data-value="Miss">Miss</button></div>
         <div class="field"><label>Approach result</label><select id="approachMiss"><option value=""></option><option>Hit</option><option>Left</option><option>Right</option><option>Short</option><option>Long</option><option>Short Left</option><option>Short Right</option><option>Long Left</option><option>Long Right</option></select></div>
-        <div id="girProximityWrap" class="field conditional"><label>Proximity to hole (ft)</label><input id="approachProximityFt" type="number" inputmode="decimal" placeholder="Optional"></div>
+        <div id="girProximityWrap" class="field conditional"><label>Distance to pin (ft) — auto-fills 1st putt</label><input id="approachProximityFt" type="number" inputmode="decimal" placeholder="Optional"></div>
         <div id="missLeaveWrap" class="field conditional"><label>Miss leave to hole (yds)</label><input id="missLeaveYds" type="number" inputmode="decimal" placeholder="Approximate"></div>
+        <div id="missLieWrap" class="field conditional"><label>Miss lie</label><select id="missLie"><option value=""></option><option>Fairway</option><option>First Cut</option><option>Rough</option><option>Bunker</option><option>Recovery</option><option>Other</option></select></div>
       </div>
 
       <div class="card section-card">
@@ -147,7 +150,22 @@
       <div class="card hero"><h2>Round saved</h2><p id="summaryCourse"></p></div>
       <div id="summaryStats" class="summary-grid"></div>
       <div id="roundSignals" class="card"></div>
+      <div class="card"><h3>Strokes Gained</h3><div id="summarySg"></div><button id="addSgFromSummary" class="secondary big">Add / edit SG details</button></div>
       <div class="card"><button id="syncRound" class="primary big">Sync to spreadsheet</button><button id="backHome" class="secondary big">Back to home</button></div>
+    </section>
+
+
+    <section id="sgView" class="view">
+      <div class="dashboard-top"><button id="sgBack" class="icon-btn small">‹</button><div><div class="eyebrow">STROKES GAINED MODE</div><h2 id="sgRoundTitle">Round</h2><div id="sgStatus" class="muted"></div></div><button id="sgSave" class="secondary compact-button">Save</button></div>
+      <div class="card hero">
+        <div class="field"><label>Compare this round against</label><select id="sgBenchmark"><option>+2</option><option selected>Scratch</option><option>5</option><option>10</option><option>15</option><option>20</option><option>Tour</option></select></div>
+        <p class="muted">Shot-by-shot SG uses a standard expected-strokes model. Handicap comparison is applied at round/category level. You can complete this on course or return to it after the round.</p>
+      </div>
+      <div class="hole-nav sg-hole-nav"><button id="sgPrevHole" class="icon-btn">‹</button><div><div class="eyebrow">SG HOLE</div><div id="sgHoleNumber" class="hole-number">1</div><div id="sgHoleMeta" class="hole-status"></div></div><button id="sgNextHole" class="icon-btn">›</button></div>
+      <div id="sgHoleResult" class="card compact"></div>
+      <div id="sgShotList"></div>
+      <div class="card"><p class="muted"><strong>How to enter:</strong> each row is the ball's position <em>before</em> that stroke. The next row is automatically the endpoint of the previous shot. Use Penalty as a stroke row when applicable. The final stroke ends in the hole.</p></div>
+      <button id="sgSaveBottom" class="primary big">Save SG details</button>
     </section>
 
     <section id="dashboardView" class="view">
