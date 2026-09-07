@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v4</title>
+  <title>Golf Tracker v5</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -109,13 +109,23 @@
         <div class="segmented wrap" data-target="teeQuality"><button data-value="Good">Good</button><button data-value="Playable">Playable</button><button data-value="Trouble">Trouble</button><button data-value="Penalty">Penalty</button></div>
       </div>
 
-      <div class="card section-card">
-        <div class="section-heading"><span class="section-number">2</span><div><h3>Approach</h3><p>Capture distance, lie, club and dispersion.</p></div></div>
+      <div id="par5SecondShotCard" class="card section-card hidden">
+        <div class="section-heading"><span class="section-number">2</span><div><h3>Par 5 — second shot</h3><p>Record the ball position before shot two. If it reaches the green, no separate approach entry is needed.</p></div></div>
         <div class="grid2">
+          <div class="field"><label>Distance to pin before 2nd shot (yds)</label><input id="secondShotYds" type="number" inputmode="numeric"></div>
+          <div class="field"><label>Club</label><select id="secondShotClub"></select></div>
+        </div>
+        <div class="field"><label>Lie before 2nd shot</label><select id="secondShotLie"><option value=""></option><option>Fairway</option><option>First Cut</option><option>Rough</option><option>Bunker</option><option>Recovery</option><option>Other</option></select></div>
+        <label class="check-row"><input id="secondShotHitGreen" type="checkbox"><span><strong>2nd shot reached the green</strong><small>For a par 5 GIR in two; the separate approach fields will be hidden.</small></span></label>
+      </div>
+
+      <div class="card section-card">
+        <div class="section-heading"><span class="section-number">3</span><div><h3 id="approachHeading">Approach</h3><p id="approachHelp">Capture distance, lie, club and dispersion.</p></div></div>
+        <div id="approachCoreFields"><div class="grid2">
           <div class="field"><label>Distance to pin (yds)</label><input id="approachYds" type="number" inputmode="numeric"></div>
           <div class="field"><label>Club</label><select id="approachClub"></select></div>
         </div>
-        <div class="field"><label>Lie</label><select id="approachLie"><option value=""></option><option>Tee</option><option>Fairway</option><option>First Cut</option><option>Rough</option><option>Bunker</option><option>Recovery</option><option>Other</option></select></div>
+        <div class="field"><label>Lie</label><select id="approachLie"><option value=""></option><option>Tee</option><option>Fairway</option><option>First Cut</option><option>Rough</option><option>Bunker</option><option>Recovery</option><option>Other</option></select></div></div>
         <label class="mini-label">Green in regulation</label>
         <div class="segmented two" data-target="gir"><button data-value="Hit">GIR</button><button data-value="Miss">Miss</button></div>
         <div class="field"><label>Approach result</label><select id="approachMiss"><option value=""></option><option>Hit</option><option>Left</option><option>Right</option><option>Short</option><option>Long</option><option>Short Left</option><option>Short Right</option><option>Long Left</option><option>Long Right</option></select></div>
@@ -125,7 +135,7 @@
       </div>
 
       <div class="card section-card">
-        <div class="section-heading"><span class="section-number">3</span><div><h3>Short game & putting</h3><p>Measure recovery quality and first-putt performance.</p></div></div>
+        <div class="section-heading"><span class="section-number">4</span><div><h3>Short game & putting</h3><p>Measure recovery quality and first-putt performance.</p></div></div>
         <div class="grid3">
           <div class="field"><label>1st putt (ft)</label><input id="firstPutt" type="number" inputmode="decimal"></div>
           <div class="field"><label>Putts</label><input id="putts" type="number" inputmode="numeric"></div>
