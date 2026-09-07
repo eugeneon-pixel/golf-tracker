@@ -47,19 +47,27 @@
         <div id="recentRounds" class="recent-list"></div>
       </div>
 
-      <details class="card settings-card">
-        <summary><strong>Connection settings</strong></summary>
-        <div class="field top-gap">
-          <label for="endpoint">Google Apps Script URL</label>
-          <input id="endpoint" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+      <div class="card auth-card">
+        <div id="signedOutPanel">
+          <h3>Google account</h3>
+          <p class="muted">Sign in securely with Google. The app never sees or stores your Google password.</p>
+          <button id="googleSignIn" class="primary big">Sign in with Google</button>
         </div>
-        <div class="field">
-          <label for="syncToken">Sync token</label>
-          <input id="syncToken" type="password" placeholder="Your private token">
+        <div id="signedInPanel" class="hidden">
+          <div class="account-row">
+            <div>
+              <div class="eyebrow">SIGNED IN</div>
+              <strong id="accountName">Google user</strong>
+              <div id="accountEmail" class="muted"></div>
+            </div>
+            <div><button id="googleReconnect" class="secondary compact-button">Connect</button><button id="switchAccount" class="ghost compact-button">Switch</button></div>
+          </div>
+          <div class="sheet-status">
+            <span id="sheetStatus">Spreadsheet ready</span>
+            <button id="openSpreadsheet" class="secondary compact-button">Open spreadsheet</button>
+          </div>
         </div>
-        <button id="saveSettings" class="secondary">Save connection</button>
-        <p class="muted">Round data remains on this phone until a sync succeeds.</p>
-      </details>
+      </div>
     </section>
 
     <section id="roundView" class="view">
@@ -152,6 +160,8 @@
       <div class="card"><h3>Putting</h3><div id="puttingAnalysis" class="analysis-table"></div></div>
     </section>
   </main>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
