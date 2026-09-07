@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v5</title>
+  <title>Golf Tracker v6</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -49,8 +49,8 @@
 
       <div class="card auth-card">
         <div id="signedOutPanel">
-          <h3>Google account</h3>
-          <p class="muted">Sign in securely with Google. The app never sees or stores your Google password.</p>
+          <h3>Golf Tracker account</h3>
+          <p class="muted">Sign in with Google through Supabase. Your rounds are stored in your private cloud database; the app never sees or stores your Google password.</p>
           <button id="googleSignIn" class="primary big">Sign in with Google</button>
         </div>
         <div id="signedInPanel" class="hidden">
@@ -63,8 +63,8 @@
             <div><button id="googleReconnect" class="secondary compact-button">Connect</button><button id="switchAccount" class="ghost compact-button">Switch</button></div>
           </div>
           <div class="sheet-status">
-            <span id="sheetStatus">Spreadsheet ready</span>
-            <button id="openSpreadsheet" class="secondary compact-button">Open spreadsheet</button>
+            <span id="sheetStatus">Cloud database connected</span>
+            <button id="openSpreadsheet" class="secondary compact-button">Google Sheets export</button>
           </div>
         </div>
       </div>
@@ -161,7 +161,7 @@
       <div id="summaryStats" class="summary-grid"></div>
       <div id="roundSignals" class="card"></div>
       <div class="card"><h3>Strokes Gained</h3><div id="summarySg"></div><button id="addSgFromSummary" class="secondary big">Add / edit SG details</button></div>
-      <div class="card"><button id="syncRound" class="primary big">Sync to spreadsheet</button><button id="backHome" class="secondary big">Back to home</button></div>
+      <div class="card"><button id="syncRound" class="primary big">Save to cloud database</button><button id="backHome" class="secondary big">Back to home</button></div>
     </section>
 
 
@@ -189,6 +189,7 @@
     </section>
   </main>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>

@@ -1,6 +1,6 @@
 const CLUBS=["","Driver","3W","5W","7W","2i","3i","4i","5i","6i","7i","8i","9i","PW","GW","50°","52°","54°","56°","58°","60°","Putter","Other"];
 const $=id=>document.getElementById(id);
-let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null,sgRound:null,sgHole:1,sgReturnView:"homeView",sgRoundIsDraft:false};
+let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null,supabase:null,sgRound:null,sgHole:1,sgReturnView:"homeView",sgRoundIsDraft:false};
 
 function uid(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`}
 function today(){return new Date().toISOString().slice(0,10)}
@@ -56,39 +56,52 @@ function maybeResumeDraft(){
   try{const d=JSON.parse(raw);if(d?.holesData&&confirm("Resume your unfinished round?")){state.round=d;state.holes=d.holesCount;state.current=1;d.holesData=d.holesData.map((h,i)=>({...blankHole(i+1),...h}));$("roundDate").value=d.date;$("course").value=d.course;$("holesCount").value=d.holesCount;$("roundPar").value=d.roundPar;loadHole(1);show("roundView")}}catch{}
 }
 
-function initGoogleAuth(){
-  const clientId=config().GOOGLE_CLIENT_ID||"";
-  if(!clientId||clientId.startsWith("PASTE_")){setAuthStatus("Google OAuth Client ID has not been configured in config.js.",false);return}
-  if(!window.google?.accounts?.oauth2){setTimeout(initGoogleAuth,300);return}
-  state.tokenClient=google.accounts.oauth2.initTokenClient({client_id:clientId,scope:GOOGLE_SCOPES,callback:handleTokenResponse});
-  const cached=JSON.parse(localStorage.getItem("golfLastUser")||"null");
-  if(cached?.sub){state.user=cached;loadCachedWorkbook();renderAuth();renderHome()}
+function normalizeSupabaseUser(u){return u?{id:u.id,sub:u.id,email:u.email||"",name:u.user_metadata?.full_name||u.user_metadata?.name||u.email?.split("@")[0]||"Golfer"}:null}
+
+async function initV6Auth(){
+  const c=config();
+  if(!c.SUPABASE_URL||!c.SUPABASE_PUBLISHABLE_KEY||String(c.SUPABASE_URL).includes("YOUR-PROJECT")){
+    setAuthStatus("Supabase is not configured yet. Complete the v6 README setup.",false);return;
+  }
+  state.supabase=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  const {data:{session}}=await state.supabase.auth.getSession();
+  if(session?.user)await applySupabaseSession(session.user);
+  state.supabase.auth.onAuthStateChange(async(event,session)=>{
+    if(session?.user){await applySupabaseSession(session.user)}
+    else if(event==="SIGNED_OUT"){state.user=null;localStorage.removeItem("golfLastUser");renderHome()}
+  });
 }
-function requestGoogleAccess({selectAccount=false}={}){
-  if(!state.tokenClient){initGoogleAuth();setTimeout(()=>state.tokenClient?.requestAccessToken({prompt:selectAccount?"select_account":"consent"}),400);return}
-  state.tokenClient.requestAccessToken({prompt:selectAccount?"select_account":""});
+async function applySupabaseSession(u){
+  state.user=normalizeSupabaseUser(u);localStorage.setItem("golfLastUser",JSON.stringify(state.user));migrateLegacyRoundsForFirstUser();
+  try{await loadRoundsFromDatabase()}catch(e){console.warn("Database load failed",e)}
+  renderAuth();renderHome();maybeResumeDraft();
 }
-async function handleTokenResponse(resp){
-  if(resp.error){alert(`Google sign-in failed: ${resp.error}`);return}
-  state.accessToken=resp.access_token;
-  try{
-    const pr=await fetch("https://openidconnect.googleapis.com/v1/userinfo",{headers:{Authorization:`Bearer ${state.accessToken}`}});
-    if(!pr.ok)throw new Error("Could not read Google profile");
-    state.user=await pr.json();localStorage.setItem("golfLastUser",JSON.stringify(state.user));migrateLegacyRoundsForFirstUser();
-    await ensureUserSpreadsheet();renderAuth();renderHome();maybeResumeDraft();
-    if(getRounds().some(r=>r.syncedSpreadsheetId!==state.spreadsheetId))await syncAll({silent:true});
-  }catch(e){alert(e.message)}
+async function requestDatabaseSignIn(){
+  if(!state.supabase){await initV6Auth();if(!state.supabase)return}
+  const redirectTo=location.origin+location.pathname;
+  const {error}=await state.supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo}});
+  if(error)alert(error.message);
 }
+async function databaseSignOut(){if(state.supabase)await state.supabase.auth.signOut();state.user=null;state.accessToken=null;state.spreadsheetId=null;state.spreadsheetUrl=null;localStorage.removeItem("golfLastUser");renderHome()}
 function setAuthStatus(message,signedIn){
   if($("signedOutPanel"))$("signedOutPanel").classList.toggle("hidden",!!signedIn);
   if($("signedInPanel"))$("signedInPanel").classList.toggle("hidden",!signedIn);
   if(message&&$("sheetStatus"))$("sheetStatus").textContent=message;
 }
 function renderAuth(){
-  const signed=!!state.user;setAuthStatus(state.spreadsheetId?"Personal spreadsheet ready":(signed?"Sign in to connect spreadsheet":""),signed);
-  if(signed){$("accountName").textContent=state.user.name||"Google user";$("accountEmail").textContent=state.user.email||"";$("openSpreadsheet").disabled=!state.spreadsheetId;$("googleReconnect").textContent=state.accessToken?"Connected":"Connect"}
+  const signed=!!state.user;setAuthStatus(signed?"Cloud database connected":"Sign in to your secure cloud database",signed);
+  if(signed){$("accountName").textContent=state.user.name||"Golfer";$("accountEmail").textContent=state.user.email||"";$("openSpreadsheet").disabled=!state.spreadsheetId;$("googleReconnect").textContent=state.accessToken?"Sheets connected":"Connect Sheets"}
   document.querySelectorAll("[data-holes]").forEach(b=>b.classList.toggle("auth-required",!signed));
 }
+
+// Optional Google Sheets export. Supabase remains the source of truth.
+function initGoogleAuth(){
+  const clientId=config().GOOGLE_CLIENT_ID||"";if(!clientId||clientId.startsWith("PASTE_"))return;
+  if(!window.google?.accounts?.oauth2){setTimeout(initGoogleAuth,300);return}
+  state.tokenClient=google.accounts.oauth2.initTokenClient({client_id:clientId,scope:GOOGLE_SCOPES,callback:handleTokenResponse});
+}
+function requestGoogleAccess({selectAccount=false}={}){if(!state.tokenClient){initGoogleAuth();setTimeout(()=>state.tokenClient?.requestAccessToken({prompt:selectAccount?"select_account":"consent"}),400);return}state.tokenClient.requestAccessToken({prompt:selectAccount?"select_account":""})}
+async function handleTokenResponse(resp){if(resp.error){alert(`Google Sheets connection failed: ${resp.error}`);return}state.accessToken=resp.access_token;try{await ensureUserSpreadsheet();renderAuth();alert("Google Sheets export connected. The database remains the source of truth.")}catch(e){alert(e.message)}}
 function loadCachedWorkbook(){const x=JSON.parse(localStorage.getItem(workbookKey())||"null");if(x){state.spreadsheetId=x.id;state.spreadsheetUrl=x.url}}
 function cacheWorkbook(id,url){if(!id){state.spreadsheetId=null;state.spreadsheetUrl=null;localStorage.removeItem(workbookKey());return}state.spreadsheetId=id;state.spreadsheetUrl=url||`https://docs.google.com/spreadsheets/d/${id}/edit`;localStorage.setItem(workbookKey(),JSON.stringify({id:state.spreadsheetId,url:state.spreadsheetUrl}))}
 async function googleFetch(url,opts={}){
@@ -124,8 +137,8 @@ async function initializeWorkbook(id){
 async function writeValues(id,range,values){return googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{method:"PUT",body:JSON.stringify({range,majorDimension:"ROWS",values})})}
 async function appendValues(id,range,values){return googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({majorDimension:"ROWS",values})})}
 async function getValues(id,range){const j=await googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}`);return j.values||[]}
-function roundRow(r){const s=r.summary||summary(r),sg=sgSummary(r);return [r.id,r.date,r.course,r.holesCount,s.score,s.toPar,s.fairways,s.fwOpp,s.fwPct,s.gir,s.girPct,s.scrambleMade,s.scrambleOpp,s.scramblePct,s.putts,s.threePutts,s.penalties,s.fwL,s.fwR,s.missLeft,s.missRight,s.missShort,s.missLong,new Date().toISOString(),s.teeGood||0,s.teePlayable||0,s.teeTrouble||0,s.teePenalty||0,s.goodPlayablePct||0,s.destructivePct||0,s.avgGirFirstPutt??"",s.avgMissFirstPutt??"",5,!!r.sg?.enabled,r.sg?.benchmark||"",r.sg?.enabled?sg.complete:false,r.sg?.enabled&&sg.complete?sg.vsBenchmark.total:""]}
-function holeRows(r){return (r.holesData||[]).map(h=>[r.id,r.date,r.course,h.hole,h.par,h.score,h.teeClub,h.fairway,h.teeQuality,h.approachYds,h.approachClub,h.gir,h.approachMiss,h.firstPutt,h.putts,h.scramble,h.penalty,h.notes,h.approachLie,h.approachProximityFt,h.missLeaveYds,h.firstPuttResult,!!h.holeOut,5,h.holeLengthYds??"",h.missLie||"",h.secondShotYds??"",h.secondShotClub||"",h.secondShotLie||"",!!h.secondShotHitGreen])}
+function roundRow(r){const s=r.summary||summary(r),sg=sgSummary(r);return [r.id,r.date,r.course,r.holesCount,s.score,s.toPar,s.fairways,s.fwOpp,s.fwPct,s.gir,s.girPct,s.scrambleMade,s.scrambleOpp,s.scramblePct,s.putts,s.threePutts,s.penalties,s.fwL,s.fwR,s.missLeft,s.missRight,s.missShort,s.missLong,new Date().toISOString(),s.teeGood||0,s.teePlayable||0,s.teeTrouble||0,s.teePenalty||0,s.goodPlayablePct||0,s.destructivePct||0,s.avgGirFirstPutt??"",s.avgMissFirstPutt??"",6,!!r.sg?.enabled,r.sg?.benchmark||"",r.sg?.enabled?sg.complete:false,r.sg?.enabled&&sg.complete?sg.vsBenchmark.total:""]}
+function holeRows(r){return (r.holesData||[]).map(h=>[r.id,r.date,r.course,h.hole,h.par,h.score,h.teeClub,h.fairway,h.teeQuality,h.approachYds,h.approachClub,h.gir,h.approachMiss,h.firstPutt,h.putts,h.scramble,h.penalty,h.notes,h.approachLie,h.approachProximityFt,h.missLeaveYds,h.firstPuttResult,!!h.holeOut,6,h.holeLengthYds??"",h.missLie||"",h.secondShotYds??"",h.secondShotClub||"",h.secondShotLie||"",!!h.secondShotHitGreen])}
 async function spreadsheetHasRound(id,roundId){const ids=await getValues(id,"Rounds!A2:A");return ids.some(r=>r[0]===roundId)}
 async function clearValues(id,range){return googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}:clear`,{method:"POST",body:"{}"})}
 function colLetter(n){let s="";while(n){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26)}return s}
@@ -164,7 +177,7 @@ function blankHole(n){return {hole:n,par:4,score:"",penalty:0,holeLengthYds:"",t
 
 function startRound(holes){
   state.holes=holes;state.current=1;
-  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:5,sg:{enabled:false,benchmark:"Scratch",holes:{}},holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
+  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:6,sg:{enabled:false,benchmark:"Scratch",holes:{}},holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
   $("roundDate").value=state.round.date;$("course").value="";$("holesCount").value=holes;$("roundPar").value=state.round.roundPar;
   loadHole(1);show("roundView");
 }
@@ -273,7 +286,7 @@ function finishRound(){
   const problems=[];state.round.holesData.forEach(h=>{const v=validateHole(h,{finishing:true});if(v.errors.length)problems.push(`Hole ${h.hole}: ${v.errors[0]}`);if(h.score==="")problems.push(`Hole ${h.hole}: score missing`) });
   if(problems.length){showValidation({errors:problems.slice(0,5),warnings:[]});return}
   const unsaved=state.round.holesData.filter(h=>!h.saved).length;if(unsaved&& !confirm(`${unsaved} hole(s) have not been saved. Finish anyway?`))return;
-  state.round.summary=summary(state.round);let rounds=getRounds();const old=rounds.findIndex(r=>r.id===state.round.id);if(old>=0)rounds[old]=state.round;else rounds.unshift(state.round);setRounds(rounds);localStorage.removeItem(`golfDraft:${state.user?.sub||"guest"}`);state.lastSavedId=state.round.id;renderSummary(state.round);renderHome();show("summaryView");
+  state.round.summary=summary(state.round);state.round.synced=false;state.round.syncedBackend=null;let rounds=getRounds();const old=rounds.findIndex(r=>r.id===state.round.id);if(old>=0)rounds[old]=state.round;else rounds.unshift(state.round);setRounds(rounds);localStorage.removeItem(`golfDraft:${state.user?.sub||"guest"}`);state.lastSavedId=state.round.id;renderSummary(state.round);renderHome();show("summaryView");
 }
 function renderSummary(round){
   const s=round.summary||summary(round);$("summaryCourse").textContent=`${round.course||"Course not entered"} • ${round.holesCount} holes • ${round.date}`;
@@ -286,9 +299,9 @@ function renderSummary(round){
   const sg=sgSummary(round);$("summarySg").innerHTML=round.sg?.enabled&&sg.complete?`<div class="signal green"><strong>SG vs ${esc(round.sg.benchmark||"Scratch")}: ${signed1(sg.vsBenchmark.total)}</strong><br><span class="muted">OTT ${signed1(sg.vsBenchmark.ott)} • APP ${signed1(sg.vsBenchmark.approach)} • ARG ${signed1(sg.vsBenchmark.around)} • PUTT ${signed1(sg.vsBenchmark.putting)} • PEN ${signed1(sg.tour.penalty)}</span></div>`:`<p class="muted">Strokes Gained details can be added now or later.</p>`;
 }
 function renderHome(){
-  const rounds=getRounds(),syncedId=state.spreadsheetId;
-  $("roundCount").textContent=rounds.length;$("unsyncedCount").textContent=rounds.filter(r=>r.syncedSpreadsheetId!==syncedId).length;
-  $("recentRounds").innerHTML=rounds.slice(0,8).map(r=>{const ss=r.summary||summary(r),ok=!!syncedId&&r.syncedSpreadsheetId===syncedId,sg=sgSummary(r);return `<div class="recent-item"><div><strong>${esc(r.course||"Unnamed course")}</strong><div class="muted">${esc(r.date)} • ${r.holesCount} holes</div><div class="round-actions"><button class="mini-action" data-edit-round="${r.id}">Edit</button><button class="mini-action sg-action" data-sg-round="${r.id}">${r.sg?.enabled?(sg.complete?"SG ✓":"Complete SG"):"Add SG"}</button></div></div><div style="text-align:right"><strong>${ss.score} (${ss.toPar>=0?"+":""}${ss.toPar})</strong><div class="badge ${ok?"":"unsynced"}">${ok?"Synced":"Unsynced"}</div>${r.sg?.enabled&&sg.complete?`<div class="muted">SG ${signed1(sg.vsBenchmark.total)} vs ${esc(r.sg.benchmark||"Scratch")}</div>`:""}</div></div>`}).join("")||`<p class="muted">${state.user?"No rounds yet.":"Sign in to start your personal round history."}</p>`;
+  const rounds=getRounds();
+  $("roundCount").textContent=rounds.length;$("unsyncedCount").textContent=rounds.filter(r=>!r.synced||r.syncedBackend!=="supabase").length;
+  $("recentRounds").innerHTML=rounds.slice(0,8).map(r=>{const ss=r.summary||summary(r),ok=!!r.synced&&r.syncedBackend==="supabase",sg=sgSummary(r);return `<div class="recent-item"><div><strong>${esc(r.course||"Unnamed course")}</strong><div class="muted">${esc(r.date)} • ${r.holesCount} holes</div><div class="round-actions"><button class="mini-action" data-edit-round="${r.id}">Edit</button><button class="mini-action sg-action" data-sg-round="${r.id}">${r.sg?.enabled?(sg.complete?"SG ✓":"Complete SG"):"Add SG"}</button></div></div><div style="text-align:right"><strong>${ss.score} (${ss.toPar>=0?"+":""}${ss.toPar})</strong><div class="badge ${ok?"":"unsynced"}">${ok?"Synced":"Unsynced"}</div>${r.sg?.enabled&&sg.complete?`<div class="muted">SG ${signed1(sg.vsBenchmark.total)} vs ${esc(r.sg.benchmark||"Scratch")}</div>`:""}</div></div>`}).join("")||`<p class="muted">${state.user?"No rounds yet.":"Sign in to start your personal round history."}</p>`;
   document.querySelectorAll("[data-sg-round]").forEach(b=>b.onclick=()=>openSgRound(b.dataset.sgRound));
   document.querySelectorAll("[data-edit-round]").forEach(b=>b.onclick=()=>editSavedRound(b.dataset.editRound));
   renderAuth();
@@ -400,6 +413,45 @@ async function refreshSgWorkbookSummary(id){
   await writeValues(id,"Strokes Gained Summary!A1",out)
 }
 
+// v6 Supabase persistence -------------------------------------------------------
+async function loadRoundsFromDatabase(){
+  if(!state.supabase||!state.user)return;
+  const {data,error}=await state.supabase.from("rounds").select("id,raw,updated_at").order("date",{ascending:false}).order("created_at",{ascending:false});
+  if(error)throw error;
+  const cloud=(data||[]).map(x=>({...x.raw,synced:true,syncedBackend:"supabase",dbUpdatedAt:x.updated_at}));
+  const local=getRounds();const map=new Map(cloud.map(r=>[r.id,r]));
+  for(const r of local){if(!r.synced||r.syncedBackend!=="supabase")map.set(r.id,r)}
+  setRounds([...map.values()].sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))));
+}
+function dbRoundRow(r){const sm=r.summary||summary(r);return {id:r.id,user_id:state.user.sub,date:r.date||null,course:r.course||"",holes_count:Number(r.holesCount)||0,round_par:Number(r.roundPar)||0,score:Number(sm.score)||0,to_par:Number(sm.toPar)||0,sg_enabled:!!r.sg?.enabled,sg_benchmark:r.sg?.benchmark||"Scratch",raw:r,updated_at:new Date().toISOString()}}
+function dbHoleRows(r){return (r.holesData||[]).map(h=>({round_id:r.id,hole_number:Number(h.hole),user_id:state.user.sub,par:Number(h.par)||0,score:h.score===""?null:Number(h.score),penalty:Number(h.penalty)||0,tee_club:h.teeClub||null,fairway:h.fairway||null,tee_quality:h.teeQuality||null,gir:h.gir||null,putts:h.putts===""?null:Number(h.putts),raw:h}))}
+function dbShotRows(r){const rows=[];if(!r.sg?.enabled)return rows;for(const h of r.holesData||[]){calculateHoleSg(h,r.sg.holes?.[h.hole]).forEach((sh,i)=>rows.push({round_id:r.id,hole_number:Number(h.hole),shot_number:i+1,user_id:state.user.sub,start_lie:sh.lie||null,distance:sh.distance===""?null:Number(sh.distance),unit:sh.unit||"yd",club:sh.club||null,category:sh.category||null,sg_vs_tour:Number(sh.sg)||0,is_penalty:sh.lie==="Penalty",raw:sh}))}return rows}
+async function syncOne(round,{refresh=true}={}){
+  if(!state.supabase||!state.user)throw new Error("Sign in to the cloud database first.");
+  let q=await state.supabase.from("rounds").upsert(dbRoundRow(round),{onConflict:"id"});if(q.error)throw q.error;
+  q=await state.supabase.from("holes").delete().eq("round_id",round.id);if(q.error)throw q.error;
+  const hr=dbHoleRows(round);if(hr.length){q=await state.supabase.from("holes").insert(hr);if(q.error)throw q.error}
+  q=await state.supabase.from("shots").delete().eq("round_id",round.id);if(q.error)throw q.error;
+  const sr=dbShotRows(round);if(sr.length){q=await state.supabase.from("shots").insert(sr);if(q.error)throw q.error}
+  let rounds=getRounds(),i=rounds.findIndex(r=>r.id===round.id);if(i>=0){rounds[i]={...rounds[i],synced:true,syncedBackend:"supabase",syncedAt:new Date().toISOString()};setRounds(rounds)}
+  return {ok:true,id:round.id};
+}
+async function syncAll({silent=false}={}){
+  if(!state.user||!state.supabase){if(!silent)alert("Sign in to the cloud database first.");return}
+  const pending=getRounds().filter(r=>!r.synced||r.syncedBackend!=="supabase");if(!pending.length){if(!silent)alert("Everything is already saved to the cloud database.");return}
+  for(const r of pending)await syncOne(r,{refresh:false});renderHome();if(!silent)alert(`${pending.length} round(s) saved to the cloud database.`)
+}
+async function fetchDashboard(){
+  if(!state.supabase||!state.user)return null;
+  const {data,error}=await state.supabase.from("holes").select("round_id,raw");if(error)throw error;
+  const holes=(data||[]).map(x=>x.raw).filter(Boolean);return buildDashboardFromHoles(holes,new Set((data||[]).map(x=>x.round_id)).size,"Cloud database");
+}
+async function exportAllToGoogleSheets(){
+  if(!state.accessToken){requestGoogleAccess({selectAccount:true});return}
+  await ensureUserSpreadsheet();for(const r of getRounds())await exportOneToSheet(r,{refresh:false});await refreshWorkbookAnalytics(state.spreadsheetId);await refreshSgWorkbookSummary(state.spreadsheetId);alert("Google Sheets export refreshed from the app data.")
+}
+async function exportOneToSheet(round,{refresh=true}={}){await ensureUserSpreadsheet();await upsertByRoundId(state.spreadsheetId,"Rounds",ROUND_HEADERS,roundRow(round),round.id);await upsertHoleRows(state.spreadsheetId,round);await syncSgRows(state.spreadsheetId,round);if(refresh){await refreshWorkbookAnalytics(state.spreadsheetId);await refreshSgWorkbookSummary(state.spreadsheetId)}}
+
 // Events
 document.querySelectorAll("[data-holes]").forEach(b=>b.addEventListener("click",()=>startRoundGuarded(Number(b.dataset.holes))));
 document.querySelectorAll(".segmented button").forEach(b=>b.addEventListener("click",()=>{b.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("active"));b.classList.add("active");updateConditionalFields()}));
@@ -414,18 +466,17 @@ $("saveHole").onclick=()=>{if(saveCurrentHole()&&state.current<state.holes)loadH
 $("finishRound").onclick=finishRound;
 $("cancelRound").onclick=()=>{if(confirm("Cancel this round? The current draft will be removed.")){localStorage.removeItem(`golfDraft:${state.user?.sub||"guest"}`);show("homeView")}};
 $("backHome").onclick=()=>{renderHome();show("homeView")};
-$("googleSignIn").onclick=()=>requestGoogleAccess({selectAccount:true});
-$("googleReconnect").onclick=()=>requestGoogleAccess();
-$("switchAccount").onclick=()=>{state.accessToken=null;state.user=null;state.spreadsheetId=null;state.spreadsheetUrl=null;localStorage.removeItem("golfLastUser");renderHome();requestGoogleAccess({selectAccount:true})};
-$("openSpreadsheet").onclick=()=>{if(state.spreadsheetUrl)window.open(state.spreadsheetUrl,"_blank")};
-$("syncBtn").onclick=()=>syncAll().catch(e=>{alert(e.message);if(!state.accessToken)requestGoogleAccess()});
-$("syncRound").onclick=async()=>{try{const r=getRounds().find(x=>x.id===state.lastSavedId);if(r){await syncOne(r);renderHome();alert("Round synced to your personal spreadsheet.")}}catch(e){alert(e.message);if(!state.accessToken)requestGoogleAccess()}};
+$("googleSignIn").onclick=requestDatabaseSignIn;
+$("googleReconnect").onclick=()=>requestGoogleAccess({selectAccount:true});
+$("switchAccount").onclick=databaseSignOut;
+$("openSpreadsheet").onclick=async()=>{try{if(state.spreadsheetUrl)window.open(state.spreadsheetUrl,"_blank");else await exportAllToGoogleSheets()}catch(e){alert(e.message)}};
+$("syncBtn").onclick=()=>syncAll().catch(e=>alert(e.message));
+$("syncRound").onclick=async()=>{try{const r=getRounds().find(x=>x.id===state.lastSavedId);if(r){await syncOne(r);renderHome();alert("Round saved to the cloud database.")}}catch(e){alert(e.message)}};
 $("addSgFromSummary").onclick=()=>{const id=state.lastSavedId||state.round?.id;if(id)openSgRound(id)};$("sgDuringRound").onclick=openSgDuringRound;
 $("sgBack").onclick=()=>{saveSgRound({silent:true});if(state.sgReturnView==="roundView"){loadHole(state.current);show("roundView")}else{renderHome();show("homeView")}};$("sgSave").onclick=saveSgRound;$("sgSaveBottom").onclick=saveSgRound;$("sgBenchmark").onchange=()=>{state.sgRound.sg.benchmark=$("sgBenchmark").value;renderSgHeader();renderSgHole()};$("sgPrevHole").onclick=()=>{if(state.sgHole>1){state.sgHole--;renderSgHole();renderSgHeader()}};$("sgNextHole").onclick=()=>{if(state.sgHole<state.sgRound.holesCount){state.sgHole++;renderSgHole();renderSgHeader()}};
 $("openDashboard").onclick=openDashboard;$("dashboardBack").onclick=()=>{renderHome();show("homeView")};$("refreshDashboard").onclick=async()=>{try{renderDashboard((await fetchDashboard())||localDashboard())}catch(e){alert(e.message)}};
 
 populateClubs();
-const cached=JSON.parse(localStorage.getItem("golfLastUser")||"null");if(cached?.sub){state.user=cached;loadCachedWorkbook()}
-renderHome();if(state.user)maybeResumeDraft();initGoogleAuth();
+renderHome();initGoogleAuth();initV6Auth();
 const draftKey=()=>`golfDraft:${state.user?.sub||"guest"}`;
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js");
