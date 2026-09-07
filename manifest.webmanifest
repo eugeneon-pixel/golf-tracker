@@ -1,20 +1,14 @@
 {
+  "id": "golf-tracker-v2",
   "name": "Golf Performance Tracker",
   "short_name": "Golf Tracker",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f4f7f5",
   "theme_color": "#0f5132",
   "icons": [
-    {
-      "src": "icon-192.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml"
-    },
-    {
-      "src": "icon-512.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml"
-    }
+    {"src":"icon-192.svg","sizes":"192x192","type":"image/svg+xml"},
+    {"src":"icon-512.svg","sizes":"512x512","type":"image/svg+xml"}
   ]
 }

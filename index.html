@@ -18,14 +18,14 @@
         <div class="eyebrow">SCRATCH PROJECT</div>
         <h1>Golf Tracker</h1>
       </div>
-      <button id="syncBtn" class="icon-btn" title="Sync">↻</button>
+      <button id="syncBtn" class="icon-btn" title="Sync pending rounds">↻</button>
     </header>
 
     <section id="homeView" class="view active">
       <div class="card hero">
         <div>
           <h2>New round</h2>
-          <p>Fast hole-by-hole entry. Saves locally and syncs to Google Sheets.</p>
+          <p>Fast hole-by-hole entry with automatic performance analysis.</p>
         </div>
         <div class="round-choice">
           <button class="primary big" data-holes="9">Start 9 holes</button>
@@ -34,24 +34,22 @@
       </div>
 
       <div class="grid2">
-        <div class="stat-card">
-          <span class="stat-label">Rounds stored</span>
-          <strong id="roundCount">0</strong>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Unsynced</span>
-          <strong id="unsyncedCount">0</strong>
-        </div>
+        <div class="stat-card"><span class="stat-label">Rounds on phone</span><strong id="roundCount">0</strong></div>
+        <div class="stat-card"><span class="stat-label">Unsynced</span><strong id="unsyncedCount">0</strong></div>
       </div>
+
+      <button id="openDashboard" class="dashboard-button">
+        <span><strong>Performance dashboard</strong><small>Driving, approach, short game & putting</small></span><span>›</span>
+      </button>
 
       <div class="card">
         <h3>Recent rounds</h3>
         <div id="recentRounds" class="recent-list"></div>
       </div>
 
-      <div class="card">
-        <h3>Connection</h3>
-        <div class="field">
+      <details class="card settings-card">
+        <summary><strong>Connection settings</strong></summary>
+        <div class="field top-gap">
           <label for="endpoint">Google Apps Script URL</label>
           <input id="endpoint" type="url" placeholder="https://script.google.com/macros/s/.../exec">
         </div>
@@ -60,157 +58,98 @@
           <input id="syncToken" type="password" placeholder="Your private token">
         </div>
         <button id="saveSettings" class="secondary">Save connection</button>
-        <p class="muted">Your round data stays on this phone until successfully synced.</p>
-      </div>
+        <p class="muted">Round data remains on this phone until a sync succeeds.</p>
+      </details>
     </section>
 
     <section id="roundView" class="view">
-      <div class="card compact">
+      <div class="card compact round-header-card">
         <div class="grid2">
-          <div class="field">
-            <label>Date</label>
-            <input id="roundDate" type="date">
-          </div>
-          <div class="field">
-            <label>Course</label>
-            <input id="course" type="text" placeholder="e.g. Howth GC">
-          </div>
+          <div class="field"><label>Date</label><input id="roundDate" type="date"></div>
+          <div class="field"><label>Course</label><input id="course" type="text" placeholder="e.g. Howth GC"></div>
         </div>
         <div class="grid2">
-          <div class="field">
-            <label>Round par</label>
-            <input id="roundPar" type="number" inputmode="numeric" value="36">
-          </div>
-          <div class="field">
-            <label>Holes</label>
-            <input id="holesCount" type="number" readonly>
-          </div>
+          <div class="field"><label>Round par</label><input id="roundPar" type="number" inputmode="numeric" value="36"></div>
+          <div class="field"><label>Holes</label><input id="holesCount" type="number" readonly></div>
         </div>
       </div>
 
       <div class="hole-nav">
         <button id="prevHole" class="icon-btn">‹</button>
-        <div>
-          <div class="eyebrow">HOLE</div>
-          <div id="holeNumber" class="hole-number">1</div>
-        </div>
+        <div><div class="eyebrow">HOLE</div><div id="holeNumber" class="hole-number">1</div><div id="holeStatus" class="hole-status">Not saved</div></div>
         <button id="nextHole" class="icon-btn">›</button>
       </div>
 
+      <div class="progress-dots" id="progressDots"></div>
+
       <div class="card">
         <div class="grid3">
-          <div class="field">
-            <label>Par</label>
-            <select id="par">
-              <option value="3">3</option>
-              <option value="4" selected>4</option>
-              <option value="5">5</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Score</label>
-            <input id="score" type="number" inputmode="numeric">
-          </div>
-          <div class="field">
-            <label>Penalty</label>
-            <input id="penalty" type="number" inputmode="numeric" value="0">
-          </div>
+          <div class="field"><label>Par</label><select id="par"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></div>
+          <div class="field"><label>Score</label><input id="score" type="number" inputmode="numeric"></div>
+          <div class="field"><label>Penalty shots</label><input id="penalty" type="number" inputmode="numeric" value="0"></div>
         </div>
       </div>
 
-      <div class="card">
-        <h3>Tee shot</h3>
-        <div class="field">
-          <label>Tee club</label>
-          <select id="teeClub"></select>
-        </div>
-        <div class="segmented" data-target="fairway">
-          <button data-value="Hit">Hit</button>
-          <button data-value="L">Left</button>
-          <button data-value="R">Right</button>
-          <button data-value="N/A">N/A</button>
-        </div>
-        <div class="segmented wrap" data-target="teeQuality">
-          <button data-value="Good">Good</button>
-          <button data-value="Playable">Playable</button>
-          <button data-value="Trouble">Trouble</button>
-          <button data-value="Penalty">Penalty</button>
-        </div>
+      <div class="card section-card">
+        <div class="section-heading"><span class="section-number">1</span><div><h3>Tee shot</h3><p>Direction matters; severity matters more.</p></div></div>
+        <div class="field"><label>Tee club</label><select id="teeClub"></select></div>
+        <label class="mini-label">Fairway / tee result</label>
+        <div class="segmented" data-target="fairway"><button data-value="Hit">Hit</button><button data-value="L">Left</button><button data-value="R">Right</button><button data-value="N/A">N/A</button></div>
+        <label class="mini-label">Tee quality</label>
+        <div class="segmented wrap" data-target="teeQuality"><button data-value="Good">Good</button><button data-value="Playable">Playable</button><button data-value="Trouble">Trouble</button><button data-value="Penalty">Penalty</button></div>
       </div>
 
-      <div class="card">
-        <h3>Approach</h3>
+      <div class="card section-card">
+        <div class="section-heading"><span class="section-number">2</span><div><h3>Approach</h3><p>Capture distance, lie, club and dispersion.</p></div></div>
         <div class="grid2">
-          <div class="field">
-            <label>Distance (yds)</label>
-            <input id="approachYds" type="number" inputmode="numeric">
-          </div>
-          <div class="field">
-            <label>Club</label>
-            <select id="approachClub"></select>
-          </div>
+          <div class="field"><label>Distance to pin (yds)</label><input id="approachYds" type="number" inputmode="numeric"></div>
+          <div class="field"><label>Club</label><select id="approachClub"></select></div>
         </div>
-        <div class="segmented" data-target="gir">
-          <button data-value="Hit">GIR</button>
-          <button data-value="Miss">Miss</button>
-        </div>
-        <div class="field">
-          <label>Approach result</label>
-          <select id="approachMiss">
-            <option value=""></option>
-            <option>Hit</option><option>Left</option><option>Right</option>
-            <option>Short</option><option>Long</option>
-            <option>Short Left</option><option>Short Right</option>
-            <option>Long Left</option><option>Long Right</option>
-          </select>
-        </div>
+        <div class="field"><label>Lie</label><select id="approachLie"><option value=""></option><option>Tee</option><option>Fairway</option><option>First Cut</option><option>Rough</option><option>Bunker</option><option>Recovery</option><option>Other</option></select></div>
+        <label class="mini-label">Green in regulation</label>
+        <div class="segmented two" data-target="gir"><button data-value="Hit">GIR</button><button data-value="Miss">Miss</button></div>
+        <div class="field"><label>Approach result</label><select id="approachMiss"><option value=""></option><option>Hit</option><option>Left</option><option>Right</option><option>Short</option><option>Long</option><option>Short Left</option><option>Short Right</option><option>Long Left</option><option>Long Right</option></select></div>
+        <div id="girProximityWrap" class="field conditional"><label>Proximity to hole (ft)</label><input id="approachProximityFt" type="number" inputmode="decimal" placeholder="Optional"></div>
+        <div id="missLeaveWrap" class="field conditional"><label>Miss leave to hole (yds)</label><input id="missLeaveYds" type="number" inputmode="decimal" placeholder="Approximate"></div>
       </div>
 
-      <div class="card">
-        <h3>Green / short game</h3>
+      <div class="card section-card">
+        <div class="section-heading"><span class="section-number">3</span><div><h3>Short game & putting</h3><p>Measure recovery quality and first-putt performance.</p></div></div>
         <div class="grid3">
-          <div class="field">
-            <label>1st putt (ft)</label>
-            <input id="firstPutt" type="number" inputmode="decimal">
-          </div>
-          <div class="field">
-            <label>Putts</label>
-            <input id="putts" type="number" inputmode="numeric">
-          </div>
-          <div class="field">
-            <label>Scramble</label>
-            <select id="scramble">
-              <option value=""></option>
-              <option>Yes</option><option>No</option><option>N/A</option>
-            </select>
-          </div>
+          <div class="field"><label>1st putt (ft)</label><input id="firstPutt" type="number" inputmode="decimal"></div>
+          <div class="field"><label>Putts</label><input id="putts" type="number" inputmode="numeric"></div>
+          <div class="field"><label>Scramble</label><select id="scramble"><option value=""></option><option>Yes</option><option>No</option><option>N/A</option></select></div>
         </div>
+        <div class="field"><label>First putt result</label><select id="firstPuttResult"><option value=""></option><option>Holed</option><option>Short</option><option>Long</option><option>Left</option><option>Right</option></select></div>
+        <label class="check-row"><input id="holeOut" type="checkbox"><span><strong>Holed out from off the green</strong><small>Use this for a zero-putt hole-out.</small></span></label>
       </div>
 
-      <div class="card">
-        <div class="field">
-          <label>Hole notes</label>
-          <textarea id="notes" rows="2" placeholder="Wind, lie, swing pattern, etc."></textarea>
-        </div>
-      </div>
+      <div class="card"><div class="field"><label>Hole notes</label><textarea id="notes" rows="2" placeholder="Wind, lie, strike, unusual situation, etc."></textarea></div></div>
+
+      <div id="validationBox" class="validation-box hidden"></div>
 
       <div class="sticky-actions">
-        <button id="saveHole" class="primary">Save hole</button>
+        <button id="saveHole" class="primary">Save & next</button>
         <button id="finishRound" class="secondary">Finish round</button>
         <button id="cancelRound" class="ghost">Cancel</button>
       </div>
     </section>
 
     <section id="summaryView" class="view">
-      <div class="card hero">
-        <h2>Round saved</h2>
-        <p id="summaryCourse"></p>
-      </div>
+      <div class="card hero"><h2>Round saved</h2><p id="summaryCourse"></p></div>
       <div id="summaryStats" class="summary-grid"></div>
-      <div class="card">
-        <button id="syncRound" class="primary big">Sync to spreadsheet</button>
-        <button id="backHome" class="secondary big">Back to home</button>
-      </div>
+      <div id="roundSignals" class="card"></div>
+      <div class="card"><button id="syncRound" class="primary big">Sync to spreadsheet</button><button id="backHome" class="secondary big">Back to home</button></div>
+    </section>
+
+    <section id="dashboardView" class="view">
+      <div class="dashboard-top"><button id="dashboardBack" class="icon-btn small">‹</button><div><div class="eyebrow">PERFORMANCE</div><h2>Scratch dashboard</h2></div><button id="refreshDashboard" class="icon-btn small">↻</button></div>
+      <div id="dashboardSource" class="muted source-line"></div>
+      <div id="dashboardKpis" class="summary-grid"></div>
+      <div class="card"><h3>Current priorities</h3><div id="priorityList"></div></div>
+      <div class="card"><h3>Driving</h3><div id="drivingMetrics" class="metric-list"></div></div>
+      <div class="card"><h3>Approach by distance</h3><div id="distanceAnalysis" class="analysis-table"></div></div>
+      <div class="card"><h3>Putting</h3><div id="puttingAnalysis" class="analysis-table"></div></div>
     </section>
   </main>
   <script src="app.js"></script>
