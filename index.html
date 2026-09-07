@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#0f5132" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
+  <title>Golf Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="app">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">SCRATCH PROJECT</div>
+        <h1>Golf Tracker</h1>
+      </div>
+      <button id="syncBtn" class="icon-btn" title="Sync">↻</button>
+    </header>
+
+    <section id="homeView" class="view active">
+      <div class="card hero">
+        <div>
+          <h2>New round</h2>
+          <p>Fast hole-by-hole entry. Saves locally and syncs to Google Sheets.</p>
+        </div>
+        <div class="round-choice">
+          <button class="primary big" data-holes="9">Start 9 holes</button>
+          <button class="secondary big" data-holes="18">Start 18 holes</button>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="stat-card">
+          <span class="stat-label">Rounds stored</span>
+          <strong id="roundCount">0</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Unsynced</span>
+          <strong id="unsyncedCount">0</strong>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Recent rounds</h3>
+        <div id="recentRounds" class="recent-list"></div>
+      </div>
+
+      <div class="card">
+        <h3>Connection</h3>
+        <div class="field">
+          <label for="endpoint">Google Apps Script URL</label>
+          <input id="endpoint" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+        </div>
+        <div class="field">
+          <label for="syncToken">Sync token</label>
+          <input id="syncToken" type="password" placeholder="Your private token">
+        </div>
+        <button id="saveSettings" class="secondary">Save connection</button>
+        <p class="muted">Your round data stays on this phone until successfully synced.</p>
+      </div>
+    </section>
+
+    <section id="roundView" class="view">
+      <div class="card compact">
+        <div class="grid2">
+          <div class="field">
+            <label>Date</label>
+            <input id="roundDate" type="date">
+          </div>
+          <div class="field">
+            <label>Course</label>
+            <input id="course" type="text" placeholder="e.g. Howth GC">
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label>Round par</label>
+            <input id="roundPar" type="number" inputmode="numeric" value="36">
+          </div>
+          <div class="field">
+            <label>Holes</label>
+            <input id="holesCount" type="number" readonly>
+          </div>
+        </div>
+      </div>
+
+      <div class="hole-nav">
+        <button id="prevHole" class="icon-btn">‹</button>
+        <div>
+          <div class="eyebrow">HOLE</div>
+          <div id="holeNumber" class="hole-number">1</div>
+        </div>
+        <button id="nextHole" class="icon-btn">›</button>
+      </div>
+
+      <div class="card">
+        <div class="grid3">
+          <div class="field">
+            <label>Par</label>
+            <select id="par">
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Score</label>
+            <input id="score" type="number" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label>Penalty</label>
+            <input id="penalty" type="number" inputmode="numeric" value="0">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Tee shot</h3>
+        <div class="field">
+          <label>Tee club</label>
+          <select id="teeClub"></select>
+        </div>
+        <div class="segmented" data-target="fairway">
+          <button data-value="Hit">Hit</button>
+          <button data-value="L">Left</button>
+          <button data-value="R">Right</button>
+          <button data-value="N/A">N/A</button>
+        </div>
+        <div class="segmented wrap" data-target="teeQuality">
+          <button data-value="Good">Good</button>
+          <button data-value="Playable">Playable</button>
+          <button data-value="Trouble">Trouble</button>
+          <button data-value="Penalty">Penalty</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Approach</h3>
+        <div class="grid2">
+          <div class="field">
+            <label>Distance (yds)</label>
+            <input id="approachYds" type="number" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label>Club</label>
+            <select id="approachClub"></select>
+          </div>
+        </div>
+        <div class="segmented" data-target="gir">
+          <button data-value="Hit">GIR</button>
+          <button data-value="Miss">Miss</button>
+        </div>
+        <div class="field">
+          <label>Approach result</label>
+          <select id="approachMiss">
+            <option value=""></option>
+            <option>Hit</option><option>Left</option><option>Right</option>
+            <option>Short</option><option>Long</option>
+            <option>Short Left</option><option>Short Right</option>
+            <option>Long Left</option><option>Long Right</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Green / short game</h3>
+        <div class="grid3">
+          <div class="field">
+            <label>1st putt (ft)</label>
+            <input id="firstPutt" type="number" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label>Putts</label>
+            <input id="putts" type="number" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label>Scramble</label>
+            <select id="scramble">
+              <option value=""></option>
+              <option>Yes</option><option>No</option><option>N/A</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="field">
+          <label>Hole notes</label>
+          <textarea id="notes" rows="2" placeholder="Wind, lie, swing pattern, etc."></textarea>
+        </div>
+      </div>
+
+      <div class="sticky-actions">
+        <button id="saveHole" class="primary">Save hole</button>
+        <button id="finishRound" class="secondary">Finish round</button>
+        <button id="cancelRound" class="ghost">Cancel</button>
+      </div>
+    </section>
+
+    <section id="summaryView" class="view">
+      <div class="card hero">
+        <h2>Round saved</h2>
+        <p id="summaryCourse"></p>
+      </div>
+      <div id="summaryStats" class="summary-grid"></div>
+      <div class="card">
+        <button id="syncRound" class="primary big">Sync to spreadsheet</button>
+        <button id="backHome" class="secondary big">Back to home</button>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
