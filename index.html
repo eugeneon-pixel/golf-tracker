@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v6.3</title>
+  <title>Golf Tracker v6.4</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -43,7 +43,11 @@
       </button>
 
       <button id="openCourseLibrary" class="dashboard-button secondary-dashboard">
-        <span><strong>Course library</strong><small>Saved tees, pars, yardages & CSV import</small></span><span>›</span>
+        <span><strong>Course library</strong><small>Saved tees, pars, yardages & shared search</small></span><span>›</span>
+      </button>
+
+      <button id="openBagMap" class="dashboard-button secondary-dashboard">
+        <span><strong>Map my bag</strong><small>My club yardages & observed on-course usage</small></span><span>›</span>
       </button>
 
       <div class="card">
@@ -78,7 +82,7 @@
       <div class="card compact round-header-card">
         <div class="grid2">
           <div class="field"><label>Date</label><input id="roundDate" type="date"></div>
-          <div class="field"><label>Course</label><div class="inline-control"><select id="course"><option value="">Select course</option></select><button id="addCourseQuick" class="mini-square" type="button" title="Add course">＋</button></div></div>
+          <div class="field"><label>Course</label><div class="inline-control"><select id="course"><option value="">Select course</option></select><button id="searchCourseQuick" class="mini-square" type="button" title="Search shared courses">⌕</button><button id="addCourseQuick" class="mini-square" type="button" title="Add course">＋</button></div></div>
         </div>
         <div class="field"><label>Tee</label><div id="teeSelector" class="tee-radios"><button type="button" data-tee="White">White</button><button type="button" data-tee="Yellow">Yellow</button><button type="button" data-tee="Blue">Blue</button><button type="button" data-tee="Red">Red</button></div></div>
         <div class="grid2">
@@ -102,7 +106,7 @@
           <div class="field"><label>Hole length (yds)</label><input id="holeLengthYds" type="number" inputmode="numeric" placeholder="Auto from course/tee"></div>
           <div class="field"><label>Par</label><div class="number-stepper"><button type="button" id="parMinus">−</button><input id="par" type="number" inputmode="numeric" min="3" max="5" value="4" readonly><button type="button" id="parPlus">＋</button></div></div>
           <div class="field"><label>Score</label><div class="number-stepper score-stepper"><button type="button" id="scoreMinus">−</button><input id="score" type="number" inputmode="numeric" min="1" value="4" readonly><button type="button" id="scorePlus">＋</button></div></div>
-          <div class="field"><label>Penalty shots</label><input id="penalty" type="number" inputmode="numeric" value="0"></div>
+          <div class="field"><label>Penalty shots</label><div class="number-stepper"><button type="button" id="penaltyMinus">−</button><input id="penalty" type="number" inputmode="numeric" min="0" value="0" readonly><button type="button" id="penaltyPlus">＋</button></div></div>
         </div>
       </div>
 
@@ -179,6 +183,12 @@
       <div class="dashboard-top"><button id="courseLibraryBack" class="icon-btn small">‹</button><div><div class="eyebrow">SETUP</div><h2>Course library</h2></div><span></span></div>
       <div class="card hero"><h3>Fast round setup</h3><p class="muted">Save a course once and Golf Tracker can prefill round par, hole par, yardage and club suggestions for each tee.</p></div>
       <div class="card">
+        <h3>Search shared courses</h3>
+        <p class="muted">Search courses configured by other Golf Tracker users. Only course/tee configuration is shared — golfer identity and round data remain private.</p>
+        <div class="inline-control"><input id="sharedCourseSearch" type="search" placeholder="Search course name"><button id="runSharedCourseSearch" class="secondary compact-button">Search</button></div>
+        <div id="sharedCourseResults" class="recent-list top-gap"></div>
+      </div>
+      <div class="card">
         <div class="grid2"><div class="field"><label>Course name</label><input id="libraryCourseName" type="text" placeholder="e.g. Howth Golf Club"></div><div class="field"><label>Holes</label><select id="libraryHoles"><option value="18">18</option><option value="9">9</option></select></div></div>
         <div class="field"><label>Tee</label><div id="libraryTeeSelector" class="tee-radios"><button type="button" data-library-tee="White">White</button><button type="button" data-library-tee="Yellow">Yellow</button><button type="button" data-library-tee="Blue">Blue</button><button type="button" data-library-tee="Red">Red</button></div></div>
         <div id="courseHoleEditor" class="course-hole-editor"></div>
@@ -192,6 +202,18 @@
         <button id="downloadCourseTemplate" class="ghost big">Download CSV template</button>
       </div>
       <div class="card"><h3>Saved courses</h3><div id="savedCourseProfiles" class="recent-list"></div></div>
+    </section>
+
+
+    <section id="bagMapView" class="view">
+      <div class="dashboard-top"><button id="bagMapBack" class="icon-btn small">‹</button><div><div class="eyebrow">SETUP</div><h2>Map my bag</h2></div><span></span></div>
+      <div class="card hero"><h3>Your personal club map</h3><p class="muted">Enter the distance you normally expect from each club. Golf Tracker uses this as the first reference for smart club suggestions, then supplements it with your actual on-course usage.</p></div>
+      <div class="card">
+        <div class="bag-table-head"><span>Club</span><span>My distance</span><span>Observed usage</span></div>
+        <div id="bagClubList" class="bag-club-list"></div>
+        <button id="saveBagMap" class="primary big">Save my bag</button>
+      </div>
+      <div class="card"><h3>How recommendations improve</h3><p class="muted">Your mapped distance is the primary reference. The observed figure is the median distance-to-target from which you have actually selected that club in saved rounds. It is useful evidence of real on-course usage, but it is not presented as measured carry distance.</p></div>
     </section>
 
     <section id="summaryView" class="view">
