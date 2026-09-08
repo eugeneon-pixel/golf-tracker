@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v6.2</title>
+  <title>Golf Tracker v6.3</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -42,6 +42,10 @@
         <span><strong>Performance dashboard</strong><small>Driving, approach, short game & putting</small></span><span>›</span>
       </button>
 
+      <button id="openCourseLibrary" class="dashboard-button secondary-dashboard">
+        <span><strong>Course library</strong><small>Saved tees, pars, yardages & CSV import</small></span><span>›</span>
+      </button>
+
       <div class="card">
         <h3>Recent rounds</h3>
         <div id="recentRounds" class="recent-list"></div>
@@ -74,12 +78,14 @@
       <div class="card compact round-header-card">
         <div class="grid2">
           <div class="field"><label>Date</label><input id="roundDate" type="date"></div>
-          <div class="field"><label>Course</label><input id="course" type="text" placeholder="e.g. Howth GC"></div>
+          <div class="field"><label>Course</label><div class="inline-control"><select id="course"><option value="">Select course</option></select><button id="addCourseQuick" class="mini-square" type="button" title="Add course">＋</button></div></div>
         </div>
+        <div class="field"><label>Tee</label><div id="teeSelector" class="tee-radios"><button type="button" data-tee="White">White</button><button type="button" data-tee="Yellow">Yellow</button><button type="button" data-tee="Blue">Blue</button><button type="button" data-tee="Red">Red</button></div></div>
         <div class="grid2">
-          <div class="field"><label>Round par</label><input id="roundPar" type="number" inputmode="numeric" value="36"></div>
+          <div class="field"><label>Round par</label><input id="roundPar" type="number" inputmode="numeric" value="36" readonly></div>
           <div class="field"><label>Holes</label><input id="holesCount" type="number" readonly></div>
         </div>
+        <div id="courseAutoNote" class="muted"></div>
       </div>
 
       <div class="hole-nav">
@@ -93,16 +99,16 @@
 
       <div class="card">
         <div class="grid2">
-          <div class="field"><label>Hole length (yds)</label><input id="holeLengthYds" type="number" inputmode="numeric" placeholder="Useful for SG"></div>
-          <div class="field"><label>Par</label><select id="par"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></div>
-          <div class="field"><label>Score</label><input id="score" type="number" inputmode="numeric"></div>
+          <div class="field"><label>Hole length (yds)</label><input id="holeLengthYds" type="number" inputmode="numeric" placeholder="Auto from course/tee"></div>
+          <div class="field"><label>Par</label><div class="number-stepper"><button type="button" id="parMinus">−</button><input id="par" type="number" inputmode="numeric" min="3" max="5" value="4" readonly><button type="button" id="parPlus">＋</button></div></div>
+          <div class="field"><label>Score</label><div class="number-stepper score-stepper"><button type="button" id="scoreMinus">−</button><input id="score" type="number" inputmode="numeric" min="1" value="4" readonly><button type="button" id="scorePlus">＋</button></div></div>
           <div class="field"><label>Penalty shots</label><input id="penalty" type="number" inputmode="numeric" value="0"></div>
         </div>
       </div>
 
       <div class="card section-card">
         <div class="section-heading"><span class="section-number">1</span><div><h3>Tee shot</h3><p>Direction matters; severity matters more.</p></div></div>
-        <div class="field"><label>Tee club</label><select id="teeClub"></select></div>
+        <div class="field"><label>Tee club</label><div class="club-stepper"><button type="button" data-club-step="teeClub" data-dir="1">−</button><select id="teeClub"></select><button type="button" data-club-step="teeClub" data-dir="-1">＋</button></div><small id="teeClubHint" class="club-hint"></small></div>
         <label class="mini-label">Fairway / tee result</label>
         <div class="segmented" data-target="fairway"><button data-value="Hit">Hit</button><button data-value="L">Left</button><button data-value="R">Right</button><button data-value="N/A">N/A</button></div>
         <label class="mini-label">Tee quality</label>
@@ -113,7 +119,7 @@
         <div class="section-heading"><span class="section-number">P</span><div><h3>Tee penalty / re-tee</h3><p>Use this when the original tee shot incurs a stroke-and-distance penalty and the next played shot is again from the tee.</p></div></div>
         <label class="check-row"><input id="teePenaltyRehit" type="checkbox"><span><strong>Next played shot is 3 off the tee</strong><small>The app will insert the penalty as stroke 2 in SG and treat the re-tee as stroke 3.</small></span></label>
         <div id="reteeFields" class="hidden top-gap">
-          <div class="field"><label>Re-tee club (stroke 3)</label><select id="reteeClub"></select></div>
+          <div class="field"><label>Re-tee club (stroke 3)</label><div class="club-stepper"><button type="button" data-club-step="reteeClub" data-dir="1">−</button><select id="reteeClub"></select><button type="button" data-club-step="reteeClub" data-dir="-1">＋</button></div><small id="reteeClubHint" class="club-hint"></small></div>
           <label class="mini-label">Re-tee result</label>
           <div class="segmented" data-target="reteeFairway"><button data-value="Hit">Hit</button><button data-value="L">Left</button><button data-value="R">Right</button><button data-value="N/A">N/A</button></div>
           <label class="mini-label">Re-tee quality</label>
@@ -126,7 +132,7 @@
         <div class="section-heading"><span class="section-number">2</span><div><h3 id="par5SecondHeading">Par 5 — second shot</h3><p id="par5SecondHelp">Record the ball position before shot two. If it reaches the green, no separate approach entry is needed.</p></div></div>
         <div class="grid2">
           <div class="field"><label>Distance to pin before 2nd shot (yds)</label><input id="secondShotYds" type="number" inputmode="numeric"></div>
-          <div class="field"><label>Club</label><select id="secondShotClub"></select></div>
+          <div class="field"><label>Club</label><div class="club-stepper"><button type="button" data-club-step="secondShotClub" data-dir="1">−</button><select id="secondShotClub"></select><button type="button" data-club-step="secondShotClub" data-dir="-1">＋</button></div><small id="secondShotClubHint" class="club-hint"></small></div>
         </div>
         <div class="field"><label>Lie before 2nd shot</label><select id="secondShotLie"><option value=""></option><option>Fairway</option><option>First Cut</option><option>Rough</option><option>Bunker</option><option>Recovery</option><option>Other</option></select></div>
         <label class="check-row"><input id="secondShotHitGreen" type="checkbox"><span><strong id="secondShotHitGreenLabel">2nd shot reached the green</strong><small id="secondShotHitGreenHelp">For a par 5 GIR in two; the separate approach fields will be hidden.</small></span></label>
@@ -136,7 +142,7 @@
         <div class="section-heading"><span class="section-number">3</span><div><h3 id="approachHeading">Approach</h3><p id="approachHelp">Capture distance, lie, club and dispersion.</p></div></div>
         <div id="approachCoreFields"><div class="grid2">
           <div class="field"><label>Distance to pin (yds)</label><input id="approachYds" type="number" inputmode="numeric"></div>
-          <div class="field"><label>Club</label><select id="approachClub"></select></div>
+          <div class="field"><label>Club</label><div class="club-stepper"><button type="button" data-club-step="approachClub" data-dir="1">−</button><select id="approachClub"></select><button type="button" data-club-step="approachClub" data-dir="-1">＋</button></div><small id="approachClubHint" class="club-hint"></small></div>
         </div>
         <div class="field"><label>Lie</label><select id="approachLie"><option value=""></option><option>Tee</option><option>Fairway</option><option>First Cut</option><option>Rough</option><option>Bunker</option><option>Recovery</option><option>Other</option></select></div></div>
         <label class="mini-label">Green in regulation</label>
@@ -167,6 +173,25 @@
         <button id="finishRound" class="secondary">Finish round</button>
         <button id="cancelRound" class="ghost">Cancel</button>
       </div>
+    </section>
+
+    <section id="courseLibraryView" class="view">
+      <div class="dashboard-top"><button id="courseLibraryBack" class="icon-btn small">‹</button><div><div class="eyebrow">SETUP</div><h2>Course library</h2></div><span></span></div>
+      <div class="card hero"><h3>Fast round setup</h3><p class="muted">Save a course once and Golf Tracker can prefill round par, hole par, yardage and club suggestions for each tee.</p></div>
+      <div class="card">
+        <div class="grid2"><div class="field"><label>Course name</label><input id="libraryCourseName" type="text" placeholder="e.g. Howth Golf Club"></div><div class="field"><label>Holes</label><select id="libraryHoles"><option value="18">18</option><option value="9">9</option></select></div></div>
+        <div class="field"><label>Tee</label><div id="libraryTeeSelector" class="tee-radios"><button type="button" data-library-tee="White">White</button><button type="button" data-library-tee="Yellow">Yellow</button><button type="button" data-library-tee="Blue">Blue</button><button type="button" data-library-tee="Red">Red</button></div></div>
+        <div id="courseHoleEditor" class="course-hole-editor"></div>
+        <button id="saveCourseProfile" class="primary big">Save course / tee</button>
+      </div>
+      <div class="card">
+        <h3>Import course CSV</h3>
+        <p class="muted">Required columns: <strong>course, tee, hole, par, yardage</strong>. Optional: holes. One row per hole.</p>
+        <input id="courseCsv" type="file" accept=".csv,text/csv">
+        <button id="importCourseCsv" class="secondary big">Import CSV</button>
+        <button id="downloadCourseTemplate" class="ghost big">Download CSV template</button>
+      </div>
+      <div class="card"><h3>Saved courses</h3><div id="savedCourseProfiles" class="recent-list"></div></div>
     </section>
 
     <section id="summaryView" class="view">
