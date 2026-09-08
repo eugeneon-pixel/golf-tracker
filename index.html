@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v6.1</title>
+  <title>Golf Tracker v6.2</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -192,9 +192,16 @@
     </section>
 
     <section id="dashboardView" class="view">
-      <div class="dashboard-top"><button id="dashboardBack" class="icon-btn small">‹</button><div><div class="eyebrow">PERFORMANCE</div><h2>Scratch dashboard</h2></div><button id="refreshDashboard" class="icon-btn small">↻</button></div>
+      <div class="dashboard-top"><button id="dashboardBack" class="icon-btn small">‹</button><div><div class="eyebrow">PERFORMANCE</div><h2>Performance dashboard</h2></div><button id="refreshDashboard" class="icon-btn small">↻</button></div>
+      <div class="card dashboard-filters">
+        <div class="grid2">
+          <div class="field"><label>Course</label><select id="dashboardCourse"><option value="">All courses</option></select></div>
+          <div class="field"><label>SG comparison</label><select id="dashboardBenchmark"><option>+2</option><option selected>Scratch</option><option>5</option><option>10</option><option>15</option><option>20</option><option>Tour</option></select></div>
+        </div>
+      </div>
       <div id="dashboardSource" class="muted source-line"></div>
       <div id="dashboardKpis" class="summary-grid"></div>
+      <div class="card sg-dashboard-card"><div class="section-heading"><span class="section-number">SG</span><div><h3>Strokes Gained</h3><p id="sgDashboardSubtitle">Completed SG rounds</p></div></div><div id="sgDashboardTotal" class="sg-total"></div><div id="sgDashboardCategories" class="sg-category-grid"></div><div id="sgDashboardNote" class="muted top-gap"></div></div>
       <div class="card"><h3>Current priorities</h3><div id="priorityList"></div></div>
       <div class="card"><h3>Driving</h3><div id="drivingMetrics" class="metric-list"></div></div>
       <div class="card"><h3>Approach by distance</h3><div id="distanceAnalysis" class="analysis-table"></div></div>
