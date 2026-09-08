@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v6</title>
+  <title>Golf Tracker v6.1</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -109,14 +109,27 @@
         <div class="segmented wrap" data-target="teeQuality"><button data-value="Good">Good</button><button data-value="Playable">Playable</button><button data-value="Trouble">Trouble</button><button data-value="Penalty">Penalty</button></div>
       </div>
 
+      <div id="teePenaltyCard" class="card section-card hidden">
+        <div class="section-heading"><span class="section-number">P</span><div><h3>Tee penalty / re-tee</h3><p>Use this when the original tee shot incurs a stroke-and-distance penalty and the next played shot is again from the tee.</p></div></div>
+        <label class="check-row"><input id="teePenaltyRehit" type="checkbox"><span><strong>Next played shot is 3 off the tee</strong><small>The app will insert the penalty as stroke 2 in SG and treat the re-tee as stroke 3.</small></span></label>
+        <div id="reteeFields" class="hidden top-gap">
+          <div class="field"><label>Re-tee club (stroke 3)</label><select id="reteeClub"></select></div>
+          <label class="mini-label">Re-tee result</label>
+          <div class="segmented" data-target="reteeFairway"><button data-value="Hit">Hit</button><button data-value="L">Left</button><button data-value="R">Right</button><button data-value="N/A">N/A</button></div>
+          <label class="mini-label">Re-tee quality</label>
+          <div class="segmented wrap" data-target="reteeQuality"><button data-value="Good">Good</button><button data-value="Playable">Playable</button><button data-value="Trouble">Trouble</button><button data-value="Penalty">Penalty</button></div>
+          <label class="check-row"><input id="reteeHitGreen" type="checkbox"><span><strong>Re-tee reached the green</strong><small>Useful mainly on a par 3. It is still not a GIR because the green was reached on stroke 3.</small></span></label>
+        </div>
+      </div>
+
       <div id="par5SecondShotCard" class="card section-card hidden">
-        <div class="section-heading"><span class="section-number">2</span><div><h3>Par 5 — second shot</h3><p>Record the ball position before shot two. If it reaches the green, no separate approach entry is needed.</p></div></div>
+        <div class="section-heading"><span class="section-number">2</span><div><h3 id="par5SecondHeading">Par 5 — second shot</h3><p id="par5SecondHelp">Record the ball position before shot two. If it reaches the green, no separate approach entry is needed.</p></div></div>
         <div class="grid2">
           <div class="field"><label>Distance to pin before 2nd shot (yds)</label><input id="secondShotYds" type="number" inputmode="numeric"></div>
           <div class="field"><label>Club</label><select id="secondShotClub"></select></div>
         </div>
         <div class="field"><label>Lie before 2nd shot</label><select id="secondShotLie"><option value=""></option><option>Fairway</option><option>First Cut</option><option>Rough</option><option>Bunker</option><option>Recovery</option><option>Other</option></select></div>
-        <label class="check-row"><input id="secondShotHitGreen" type="checkbox"><span><strong>2nd shot reached the green</strong><small>For a par 5 GIR in two; the separate approach fields will be hidden.</small></span></label>
+        <label class="check-row"><input id="secondShotHitGreen" type="checkbox"><span><strong id="secondShotHitGreenLabel">2nd shot reached the green</strong><small id="secondShotHitGreenHelp">For a par 5 GIR in two; the separate approach fields will be hidden.</small></span></label>
       </div>
 
       <div class="card section-card">
@@ -149,7 +162,7 @@
 
       <div id="validationBox" class="validation-box hidden"></div>
 
-      <div class="sticky-actions">
+      <div class="round-end-actions">
         <button id="saveHole" class="primary">Save & next</button>
         <button id="finishRound" class="secondary">Finish round</button>
         <button id="cancelRound" class="ghost">Cancel</button>
