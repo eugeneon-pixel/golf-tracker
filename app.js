@@ -1,6 +1,6 @@
 const CLUBS=["","Driver","3W","5W","7W","4 Hybrid","2i","3i","4i","5i","6i","7i","8i","9i","PW","48°","GW","50°","52°","54°","56°","58°","60°","Putter","Other"];
 const $=id=>document.getElementById(id);
-let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null,supabase:null,sgRound:null,sgHole:1,sgReturnView:"homeView",sgRoundIsDraft:false,courseProfiles:[],bagClubs:[],selectedTee:"White",libraryTee:"White",courseReturnView:"homeView"};
+let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null,supabase:null,sgRound:null,sgHole:1,sgReturnView:"homeView",sgRoundIsDraft:false,courseProfiles:[],bagClubs:[],selectedTee:"White",libraryTee:"White",courseReturnView:"homeView",entryStep:"setup"};
 
 function uid(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`}
 function today(){return new Date().toISOString().slice(0,10)}
@@ -61,7 +61,7 @@ function migrateLegacyRoundsForFirstUser(){
 function startRoundGuarded(holes){if(requireUser())startRound(holes)}
 function maybeResumeDraft(){
   if(!state.user||state.round)return;const key=`golfDraft:${state.user.sub}`,raw=localStorage.getItem(key);if(!raw)return;
-  try{const d=JSON.parse(raw);if(d?.holesData&&confirm("Resume your unfinished round?")){state.round=d;state.holes=d.holesCount;state.current=1;d.holesData=d.holesData.map((h,i)=>({...blankHole(i+1),...h}));$("roundDate").value=d.date;refreshCourseSelect(d.course);state.selectedTee=roundTee(d);setTeeButton("data-tee",state.selectedTee);$("holesCount").value=d.holesCount;$("roundPar").value=d.roundPar;loadHole(1);show("roundView")}}catch{}
+  try{const d=JSON.parse(raw);if(d?.holesData&&confirm("Resume your unfinished round?")){state.round=d;state.holes=d.holesCount;state.current=1;d.holesData=d.holesData.map((h,i)=>({...blankHole(i+1),...h}));$("roundDate").value=d.date;refreshCourseSelect(d.course);state.selectedTee=roundTee(d);setTeeButton("data-tee",state.selectedTee);$("holesCount").value=d.holesCount;$("roundPar").value=d.roundPar;loadHole(1);show("roundView");setEntryStep("basics")}}catch{}
 }
 
 function normalizeSupabaseUser(u){return u?{id:u.id,sub:u.id,email:u.email||"",name:u.user_metadata?.full_name||u.user_metadata?.name||u.email?.split("@")[0]||"Golfer"}:null}
@@ -272,9 +272,9 @@ function downloadCourseTemplate(){const rows=["course,tee,hole,par,yardage,holes
 
 function startRound(holes){
   state.holes=holes;state.current=1;
-  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:6.4,sg:{enabled:false,benchmark:"Scratch",holes:{}},holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
+  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:6.5,sg:{enabled:false,benchmark:"Scratch",holes:{}},holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
   $("roundDate").value=state.round.date;refreshCourseSelect("");$("holesCount").value=holes;$("roundPar").value=state.round.roundPar;state.selectedTee="White";setTeeButton("data-tee",state.selectedTee);
-  loadHole(1);show("roundView");
+  loadHole(1);show("roundView");setEntryStep("setup");
 }
 function readRoundHeader(){state.round.date=$("roundDate").value;state.round.course=$("course").value==="__new__"?"":$("course").value.trim();state.round.teeColor=state.selectedTee;state.round.roundPar=Number($("roundPar").value)||0}
 function selectedSegment(target){const el=document.querySelector(`.segmented[data-target="${target}"] button.active`);return el?el.dataset.value:""}
@@ -348,9 +348,56 @@ function loadHole(n){
   $("firstPuttResult").value=h.firstPuttResult||"";$("holeOut").checked=!!h.holeOut;$("notes").value=h.notes;$("holeStatus").textContent=h.saved?"Saved":"Not saved";
   $("prevHole").disabled=n===1;$("nextHole").disabled=n===state.holes;showValidation({errors:[],warnings:[]});updateConditionalFields();renderProgress();
   applyClubSuggestion("teeClub","tee",h.holeLengthYds,{force:false});applyClubSuggestion("secondShotClub","second",h.secondShotYds,{force:false});applyClubSuggestion("approachClub","approach",h.approachYds,{force:false});
+  if(state.entryStep==="review")renderHoleReview();
 }
 function renderProgress(){
   $("progressDots").innerHTML=state.round.holesData.map((h,i)=>`<span class="progress-dot ${h.saved?"complete":""} ${i===state.current-1?"current":""}"></span>`).join("");
+}
+const ENTRY_STEPS=["setup","basics","tee","approach","short","review"];
+function renderHoleReview(){
+  if(!state.round||!$("holeReviewSummary"))return;
+  const h=applySmartDefaults(currentForm());
+  const green=h.gir||"—", scoreToPar=(h.score!==""&&h.par)?Number(h.score)-Number(h.par):null;
+  const scoreLabel=scoreToPar===null?"—":`${h.score} (${scoreToPar===0?"E":scoreToPar>0?`+${scoreToPar}`:scoreToPar})`;
+  const tee=[h.teeClub,h.fairway,h.teeQuality].filter(Boolean).join(" • ")||"—";
+  const app=effectiveApproach(h);const approach=[app.club,app.distance?`${app.distance} yd`:"",green].filter(Boolean).join(" • ")||"—";
+  $("holeReviewSummary").innerHTML=`
+    <div class="review-row"><span>Hole</span><strong>${state.current} • Par ${h.par||"—"} • ${h.holeLengthYds||"—"} yd</strong></div>
+    <div class="review-row"><span>Score</span><strong>${scoreLabel}${h.penalty?` • ${h.penalty} pen`:""}</strong></div>
+    <div class="review-row"><span>Tee</span><strong>${esc(tee)}</strong></div>
+    <div class="review-row"><span>Approach</span><strong>${esc(approach)}</strong></div>
+    <div class="review-row"><span>Putting</span><strong>${h.putts===""?"—":`${h.putts} putt${Number(h.putts)===1?"":"s"}`}${h.firstPutt!==""?` • ${h.firstPutt} ft first`:""}</strong></div>`;
+}
+function setEntryStep(step,{scroll=true}={}){
+  if(!ENTRY_STEPS.includes(step))step="basics";state.entryStep=step;
+  document.querySelectorAll(".wizard-panel").forEach(el=>el.classList.toggle("wizard-step-hidden",el.dataset.entryStep!==step));
+  const holeMode=step!=="setup";
+  $("holeNavWrap")?.classList.toggle("hidden",!holeMode);$("progressDots")?.classList.toggle("hidden",!holeMode);$("entryStepBar")?.classList.toggle("hidden",!holeMode);
+  document.querySelectorAll("[data-step-dot]").forEach(el=>{const i=ENTRY_STEPS.indexOf(el.dataset.stepDot),cur=ENTRY_STEPS.indexOf(step);el.classList.toggle("active",el.dataset.stepDot===step);el.classList.toggle("done",i>0&&i<cur)});
+  const back=$("entryBack"),next=$("entryNext"),nav=$("wizardNav");
+  nav?.classList.remove("hidden");
+  if(back){back.textContent=step==="setup"?"Cancel":step==="basics"?"Course":"Back";back.classList.toggle("hidden",step==="review"?false:false)}
+  if(next){next.classList.toggle("hidden",step==="review");next.textContent=step==="setup"?"Start hole 1":step==="short"?"Review":"Next"}
+  if(step==="review")renderHoleReview();
+  if(scroll)window.scrollTo({top:0,behavior:"smooth"});
+}
+function nextEntryStep(){
+  const step=state.entryStep;
+  if(step==="setup"){
+    readRoundHeader();
+    if(!state.round.course){alert("Select or add a course before starting the round.");return}
+    loadHole(state.current||1);setEntryStep("basics");return;
+  }
+  if(step==="basics"){setEntryStep("tee");return}
+  if(step==="tee"){setEntryStep("approach");return}
+  if(step==="approach"){setEntryStep("short");return}
+  if(step==="short"){renderHoleReview();setEntryStep("review");return}
+}
+function previousEntryStep(){
+  const step=state.entryStep;
+  if(step==="setup"){$("cancelRound").click();return}
+  if(step==="basics"){setEntryStep("setup");return}
+  const i=ENTRY_STEPS.indexOf(step);setEntryStep(ENTRY_STEPS[Math.max(1,i-1)]);
 }
 function updateConditionalFields(){
   const par=Number($("par").value)||4,teePenaltyRehit=$("teePenaltyRehit").checked,par5Hit=par===5&&$("secondShotHitGreen").checked,reteeHit=$("reteeHitGreen").checked;
@@ -543,7 +590,7 @@ function reconcileGirFromSg(round){
   round.summary=summary(round);return round;
 }
 function saveSgRound({silent=false}={}){const r=state.sgRound;reconcileGirFromSg(r);r.sg.benchmark=$("sgBenchmark").value;r.sg.updatedAt=new Date().toISOString();r.synced=false;r.syncedSpreadsheetId=null;if(state.sgRoundIsDraft){state.round=r;localStorage.setItem(`golfDraft:${state.user?.sub||"guest"}`,JSON.stringify(r))}else{let rounds=getRounds(),i=rounds.findIndex(x=>x.id===r.id);if(i>=0)rounds[i]=r;setRounds(rounds);state.lastSavedId=r.id;renderHome()}renderSgHeader();if(!silent)alert("Strokes Gained details saved. You can return and add or change them at any time.")}
-function editSavedRound(id){const r=getRounds().find(x=>x.id===id);if(!r)return;state.round=JSON.parse(JSON.stringify(r));state.holes=r.holesCount;state.current=1;state.round.holesData=state.round.holesData.map((h,i)=>({...blankHole(i+1),...h}));$("roundDate").value=r.date;refreshCourseSelect(r.course);state.selectedTee=roundTee(r);setTeeButton("data-tee",state.selectedTee);$("holesCount").value=r.holesCount;$("roundPar").value=r.roundPar||r.holesData.reduce((a,h)=>a+Number(h.par||0),0);loadHole(1);show("roundView")}
+function editSavedRound(id){const r=getRounds().find(x=>x.id===id);if(!r)return;state.round=JSON.parse(JSON.stringify(r));state.holes=r.holesCount;state.current=1;state.round.holesData=state.round.holesData.map((h,i)=>({...blankHole(i+1),...h}));$("roundDate").value=r.date;refreshCourseSelect(r.course);state.selectedTee=roundTee(r);setTeeButton("data-tee",state.selectedTee);$("holesCount").value=r.holesCount;$("roundPar").value=r.roundPar||r.holesData.reduce((a,h)=>a+Number(h.par||0),0);loadHole(1);show("roundView");setEntryStep("basics")}
 function sgShotRows(r){if(!r.sg?.enabled)return[];const rows=[];(r.holesData||[]).forEach(h=>calculateHoleSg(h,r.sg.holes?.[h.hole]).forEach((sh,i)=>rows.push([r.id,r.date,r.course,h.hole,i+1,sh.lie,sh.distance,sh.unit,sh.club,sh.category,sh.sg,new Date().toISOString(),r.sg.benchmark||"Scratch"])));return rows}
 function renderSgSummaryCard(round){const s=sgSummary(round);return s.complete?`SG ${signed1(s.vsBenchmark.total)} vs ${esc(round.sg.benchmark)}`:`SG incomplete`}
 async function refreshSgWorkbookSummary(id){
@@ -622,9 +669,10 @@ $("putts").addEventListener("change",()=>{const p=Number($("putts").value);if(p=
 $("holeOut").addEventListener("change",updateConditionalFields);
 $("approachMiss").addEventListener("change",updateConditionalFields);
 $("approachProximityFt").addEventListener("input",()=>{if(selectedSegment("gir")==="Hit"||$("approachMiss").value==="Hit")$("firstPutt").value=$("approachProximityFt").value});
-$("prevHole").onclick=()=>{if(saveCurrentHole()&&state.current>1){loadHole(state.current-1);window.scrollTo({top:0,behavior:"smooth"})}};
-$("nextHole").onclick=()=>{if(saveCurrentHole()&&state.current<state.holes){loadHole(state.current+1);window.scrollTo({top:0,behavior:"smooth"})}};
-$("saveHole").onclick=()=>{if(saveCurrentHole()&&state.current<state.holes){loadHole(state.current+1);window.scrollTo({top:0,behavior:"smooth"})}else if(state.current===state.holes)alert("Final hole saved. Tap Finish round when ready.")};
+$("prevHole").onclick=()=>{if(saveCurrentHole({silent:true})&&state.current>1){loadHole(state.current-1);setEntryStep("basics")}};
+$("nextHole").onclick=()=>{if(saveCurrentHole({silent:true})&&state.current<state.holes){loadHole(state.current+1);setEntryStep("basics")}};
+$("entryBack").onclick=previousEntryStep;$("entryNext").onclick=nextEntryStep;
+$("saveHole").onclick=()=>{if(saveCurrentHole()&&state.current<state.holes){loadHole(state.current+1);setEntryStep("basics")}else if(state.current===state.holes)alert("Final hole saved. Tap Finish round when ready.")};
 $("finishRound").onclick=finishRound;
 $("cancelRound").onclick=()=>{if(confirm("Cancel this round? The current draft will be removed.")){localStorage.removeItem(`golfDraft:${state.user?.sub||"guest"}`);show("homeView")}};
 $("backHome").onclick=()=>{renderHome();show("homeView")};
@@ -635,7 +683,7 @@ $("openSpreadsheet").onclick=async()=>{try{if(state.spreadsheetUrl)window.open(s
 $("syncBtn").onclick=()=>syncAll().catch(e=>alert(e.message));
 $("syncRound").onclick=async()=>{try{const r=getRounds().find(x=>x.id===state.lastSavedId);if(r){await syncOne(r);renderHome();alert("Round saved to the cloud database.")}}catch(e){alert(e.message)}};
 $("addSgFromSummary").onclick=()=>{const id=state.lastSavedId||state.round?.id;if(id)openSgRound(id)};$("sgDuringRound").onclick=openSgDuringRound;
-$("sgBack").onclick=()=>{saveSgRound({silent:true});if(state.sgReturnView==="roundView"){loadHole(state.current);show("roundView")}else{renderHome();show("homeView")}};$("sgSave").onclick=saveSgRound;$("sgSaveBottom").onclick=saveSgRound;$("sgBenchmark").onchange=()=>{state.sgRound.sg.benchmark=$("sgBenchmark").value;renderSgHeader();renderSgHole()};$("sgPrevHole").onclick=()=>{if(state.sgHole>1){state.sgHole--;renderSgHole();renderSgHeader()}};$("sgNextHole").onclick=()=>{if(state.sgHole<state.sgRound.holesCount){state.sgHole++;renderSgHole();renderSgHeader()}};
+$("sgBack").onclick=()=>{saveSgRound({silent:true});if(state.sgReturnView==="roundView"){loadHole(state.current);show("roundView");setEntryStep("review")}else{renderHome();show("homeView")}};$("sgSave").onclick=saveSgRound;$("sgSaveBottom").onclick=saveSgRound;$("sgBenchmark").onchange=()=>{state.sgRound.sg.benchmark=$("sgBenchmark").value;renderSgHeader();renderSgHole()};$("sgPrevHole").onclick=()=>{if(state.sgHole>1){state.sgHole--;renderSgHole();renderSgHeader()}};$("sgNextHole").onclick=()=>{if(state.sgHole<state.sgRound.holesCount){state.sgHole++;renderSgHole();renderSgHeader()}};
 $("openDashboard").onclick=openDashboard;$("openBagMap").onclick=()=>{renderBagMap();show("bagMapView")};$("bagMapBack").onclick=()=>{renderHome();show("homeView")};$("saveBagMap").onclick=saveBagMap;$("runSharedCourseSearch").onclick=searchSharedCourses;$("sharedCourseSearch").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();searchSharedCourses()}});$("sharedCourseResults").addEventListener("click",e=>{const b=e.target.closest("[data-use-shared]");if(b)useSharedCourse(Number(b.dataset.useShared))});$("openCourseLibrary").onclick=()=>{state.courseReturnView="homeView";state.libraryTee="White";setTeeButton("data-library-tee",state.libraryTee);renderCourseHoleEditor();renderSavedCourseProfiles();show("courseLibraryView")};$("courseLibraryBack").onclick=()=>{refreshCourseSelect(state.round?.course||"");show(state.courseReturnView||"homeView")};$("libraryHoles").onchange=renderCourseHoleEditor;$("libraryCourseName").addEventListener("change",renderCourseHoleEditor);$("saveCourseProfile").onclick=saveCourseFromEditor;$("importCourseCsv").onclick=importCourseCsv;$("downloadCourseTemplate").onclick=downloadCourseTemplate;$("savedCourseProfiles").addEventListener("click",e=>{const b=e.target.closest("[data-edit-course]");if(!b)return;$("libraryCourseName").value=b.dataset.editCourse;state.libraryTee=b.dataset.editTee;setTeeButton("data-library-tee",state.libraryTee);const p=mergedCourseProfiles().find(x=>profileKey(x.name,x.tee_color)===profileKey(b.dataset.editCourse,b.dataset.editTee));if(p)$("libraryHoles").value=p.holes_count;renderCourseHoleEditor();window.scrollTo({top:0,behavior:"smooth"})});
 $("openDashboard").onclick=openDashboard;$("dashboardBack").onclick=()=>{renderHome();show("homeView")};$("refreshDashboard").onclick=refreshDashboardView;$("dashboardCourse").onchange=refreshDashboardView;$("dashboardBenchmark").onchange=refreshDashboardView;
 

@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v6.4</title>
+  <title>Golf Tracker v6.5</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -79,7 +79,7 @@
     </section>
 
     <section id="roundView" class="view">
-      <div class="card compact round-header-card">
+      <div id="roundSetupCard" class="card compact round-header-card wizard-panel" data-entry-step="setup">
         <div class="grid2">
           <div class="field"><label>Date</label><input id="roundDate" type="date"></div>
           <div class="field"><label>Course</label><div class="inline-control"><select id="course"><option value="">Select course</option></select><button id="searchCourseQuick" class="mini-square" type="button" title="Search shared courses">⌕</button><button id="addCourseQuick" class="mini-square" type="button" title="Add course">＋</button></div></div>
@@ -92,16 +92,20 @@
         <div id="courseAutoNote" class="muted"></div>
       </div>
 
-      <div class="hole-nav">
+      <div id="holeNavWrap" class="hole-nav">
         <button id="prevHole" class="icon-btn">‹</button>
         <div><div class="eyebrow">HOLE</div><div id="holeNumber" class="hole-number">1</div><div id="holeStatus" class="hole-status">Not saved</div></div>
         <button id="nextHole" class="icon-btn">›</button>
       </div>
 
       <div class="progress-dots" id="progressDots"></div>
-      <button id="sgDuringRound" class="secondary big sg-on-course">SG Mode — add shot detail on course</button>
+      <div id="entryStepBar" class="entry-step-bar">
+        <span data-step-dot="basics">Hole</span><span data-step-dot="tee">Tee</span><span data-step-dot="approach">Approach</span><span data-step-dot="short">Short game</span><span data-step-dot="review">Review</span>
+      </div>
+      <button id="sgDuringRound" class="secondary big sg-on-course wizard-panel" data-entry-step="review">SG Mode — add shot detail on course</button>
 
-      <div class="card">
+      <div id="holeBasicsCard" class="card wizard-panel" data-entry-step="basics">
+        <div class="section-heading"><span class="section-number">1</span><div><h3>Hole information</h3><p>Confirm yardage, par, score and penalties.</p></div></div>
         <div class="grid2">
           <div class="field"><label>Hole length (yds)</label><input id="holeLengthYds" type="number" inputmode="numeric" placeholder="Auto from course/tee"></div>
           <div class="field"><label>Par</label><div class="number-stepper"><button type="button" id="parMinus">−</button><input id="par" type="number" inputmode="numeric" min="3" max="5" value="4" readonly><button type="button" id="parPlus">＋</button></div></div>
@@ -110,8 +114,8 @@
         </div>
       </div>
 
-      <div class="card section-card">
-        <div class="section-heading"><span class="section-number">1</span><div><h3>Tee shot</h3><p>Direction matters; severity matters more.</p></div></div>
+      <div id="teeShotCard" class="card section-card wizard-panel" data-entry-step="tee">
+        <div class="section-heading"><span class="section-number">2</span><div><h3>Tee shot</h3><p>Direction matters; severity matters more.</p></div></div>
         <div class="field"><label>Tee club</label><div class="club-stepper"><button type="button" data-club-step="teeClub" data-dir="1">−</button><select id="teeClub"></select><button type="button" data-club-step="teeClub" data-dir="-1">＋</button></div><small id="teeClubHint" class="club-hint"></small></div>
         <label class="mini-label">Fairway / tee result</label>
         <div class="segmented" data-target="fairway"><button data-value="Hit">Hit</button><button data-value="L">Left</button><button data-value="R">Right</button><button data-value="N/A">N/A</button></div>
@@ -119,7 +123,7 @@
         <div class="segmented wrap" data-target="teeQuality"><button data-value="Good">Good</button><button data-value="Playable">Playable</button><button data-value="Trouble">Trouble</button><button data-value="Penalty">Penalty</button></div>
       </div>
 
-      <div id="teePenaltyCard" class="card section-card hidden">
+      <div id="teePenaltyCard" class="card section-card hidden wizard-panel" data-entry-step="tee">
         <div class="section-heading"><span class="section-number">P</span><div><h3>Tee penalty / re-tee</h3><p>Use this when the original tee shot incurs a stroke-and-distance penalty and the next played shot is again from the tee.</p></div></div>
         <label class="check-row"><input id="teePenaltyRehit" type="checkbox"><span><strong>Next played shot is 3 off the tee</strong><small>The app will insert the penalty as stroke 2 in SG and treat the re-tee as stroke 3.</small></span></label>
         <div id="reteeFields" class="hidden top-gap">
@@ -132,7 +136,7 @@
         </div>
       </div>
 
-      <div id="par5SecondShotCard" class="card section-card hidden">
+      <div id="par5SecondShotCard" class="card section-card hidden wizard-panel" data-entry-step="approach">
         <div class="section-heading"><span class="section-number">2</span><div><h3 id="par5SecondHeading">Par 5 — second shot</h3><p id="par5SecondHelp">Record the ball position before shot two. If it reaches the green, no separate approach entry is needed.</p></div></div>
         <div class="grid2">
           <div class="field"><label>Distance to pin before 2nd shot (yds)</label><input id="secondShotYds" type="number" inputmode="numeric"></div>
@@ -142,7 +146,7 @@
         <label class="check-row"><input id="secondShotHitGreen" type="checkbox"><span><strong id="secondShotHitGreenLabel">2nd shot reached the green</strong><small id="secondShotHitGreenHelp">For a par 5 GIR in two; the separate approach fields will be hidden.</small></span></label>
       </div>
 
-      <div class="card section-card">
+      <div id="approachCard" class="card section-card wizard-panel" data-entry-step="approach">
         <div class="section-heading"><span class="section-number">3</span><div><h3 id="approachHeading">Approach</h3><p id="approachHelp">Capture distance, lie, club and dispersion.</p></div></div>
         <div id="approachCoreFields"><div class="grid2">
           <div class="field"><label>Distance to pin (yds)</label><input id="approachYds" type="number" inputmode="numeric"></div>
@@ -157,7 +161,7 @@
         <div id="missLieWrap" class="field conditional"><label>Miss lie</label><select id="missLie"><option value=""></option><option>Fairway</option><option>First Cut</option><option>Rough</option><option>Bunker</option><option>Recovery</option><option>Other</option></select></div>
       </div>
 
-      <div class="card section-card">
+      <div id="shortGameCard" class="card section-card wizard-panel" data-entry-step="short">
         <div class="section-heading"><span class="section-number">4</span><div><h3>Short game & putting</h3><p>Measure recovery quality and first-putt performance.</p></div></div>
         <div class="grid3">
           <div class="field"><label>1st putt (ft)</label><input id="firstPutt" type="number" inputmode="decimal"></div>
@@ -168,11 +172,21 @@
         <label class="check-row"><input id="holeOut" type="checkbox"><span><strong>Holed out from off the green</strong><small>Use this for a zero-putt hole-out.</small></span></label>
       </div>
 
-      <div class="card"><div class="field"><label>Hole notes</label><textarea id="notes" rows="2" placeholder="Wind, lie, strike, unusual situation, etc."></textarea></div></div>
+      <div id="notesCard" class="card wizard-panel" data-entry-step="short"><div class="field"><label>Hole notes</label><textarea id="notes" rows="2" placeholder="Wind, lie, strike, unusual situation, etc."></textarea></div></div>
+
+      <div id="reviewCard" class="card wizard-panel" data-entry-step="review">
+        <div class="section-heading"><span class="section-number">✓</span><div><h3>Review hole</h3><p>Check the essentials, then save and move on.</p></div></div>
+        <div id="holeReviewSummary" class="review-summary"></div>
+      </div>
 
       <div id="validationBox" class="validation-box hidden"></div>
 
-      <div class="round-end-actions">
+      <div id="wizardNav" class="wizard-nav">
+        <button id="entryBack" class="secondary">Back</button>
+        <button id="entryNext" class="primary">Next</button>
+      </div>
+
+      <div id="roundEndActions" class="round-end-actions wizard-panel" data-entry-step="review">
         <button id="saveHole" class="primary">Save & next</button>
         <button id="finishRound" class="secondary">Finish round</button>
         <button id="cancelRound" class="ghost">Cancel</button>
