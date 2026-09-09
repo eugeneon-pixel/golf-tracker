@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v6.5</title>
+  <title>Golf Tracker v6.6</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -50,6 +50,10 @@
         <span><strong>Map my bag</strong><small>My club yardages & observed on-course usage</small></span><span>›</span>
       </button>
 
+      <button id="openIntegrations" class="dashboard-button secondary-dashboard auth-only-button hidden">
+        <span><strong>Integrations</strong><small>Google Sheets export & connected services</small></span><span>›</span>
+      </button>
+
       <div class="card">
         <h3>Recent rounds</h3>
         <div id="recentRounds" class="recent-list"></div>
@@ -58,23 +62,63 @@
       <div class="card auth-card">
         <div id="signedOutPanel">
           <h3>Golf Tracker account</h3>
-          <p class="muted">Sign in with Google through Supabase. Your rounds are stored in your private cloud database; the app never sees or stores your Google password.</p>
-          <button id="googleSignIn" class="primary big">Sign in with Google</button>
+          <p class="muted">Sign in with Google, Microsoft, or any email address. Supabase securely manages authentication and your private golf data.</p>
+          <div class="auth-provider-grid">
+            <button id="googleSignIn" class="secondary big auth-provider">Continue with Google</button>
+            <button id="microsoftSignIn" class="secondary big auth-provider">Continue with Microsoft</button>
+          </div>
+          <div class="auth-divider"><span>or use email</span></div>
+          <div class="field"><label>Email</label><input id="authEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com"></div>
+          <div class="field"><label>Password</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Password"></div>
+          <button id="emailSignIn" class="primary big">Sign in</button>
+          <button id="emailSignUp" class="secondary big">Create account</button>
+          <button id="forgotPassword" class="ghost big compact-button">Forgot password?</button>
+          <div id="authMessage" class="muted auth-message"></div>
+        </div>
+        <div id="passwordRecoveryPanel" class="hidden">
+          <h3>Set a new password</h3>
+          <p class="muted">Enter a new password for your Golf Tracker account.</p>
+          <div class="field"><label>New password</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="New password"></div>
+          <div class="field"><label>Confirm password</label><input id="confirmNewPassword" type="password" autocomplete="new-password" placeholder="Confirm password"></div>
+          <button id="saveNewPassword" class="primary big">Save new password</button>
         </div>
         <div id="signedInPanel" class="hidden">
           <div class="account-row">
             <div>
               <div class="eyebrow">SIGNED IN</div>
-              <strong id="accountName">Google user</strong>
+              <strong id="accountName">Golfer</strong>
               <div id="accountEmail" class="muted"></div>
             </div>
-            <div><button id="googleReconnect" class="secondary compact-button">Connect</button><button id="switchAccount" class="ghost compact-button">Switch</button></div>
+            <button id="switchAccount" class="ghost compact-button">Sign out</button>
           </div>
           <div class="sheet-status">
             <span id="sheetStatus">Cloud database connected</span>
-            <button id="openSpreadsheet" class="secondary compact-button">Google Sheets export</button>
+            <button id="manageIntegrations" class="secondary compact-button">Integrations</button>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section id="integrationsView" class="view">
+      <div class="dashboard-top">
+        <button id="integrationsBack" class="icon-btn small">‹</button>
+        <div><h2>Integrations</h2><div class="muted">Optional services connected to your Golf Tracker account</div></div>
+        <div></div>
+      </div>
+      <div class="card">
+        <div class="integration-heading">
+          <div><h3>Google Sheets</h3><p class="muted">Supabase remains the source of truth. Connect any Google account to export or refresh your personal spreadsheet.</p></div>
+          <span id="googleSheetsBadge" class="badge">Not connected</span>
+        </div>
+        <div id="googleSheetsAccount" class="muted integration-detail">Your Golf Tracker login and Google Sheets account can be different accounts.</div>
+        <button id="googleReconnect" class="primary big">Connect Google Sheets</button>
+        <button id="exportSheets" class="secondary big">Sync all data to Google Sheets</button>
+        <button id="openSpreadsheet" class="secondary big">Open spreadsheet</button>
+        <button id="disconnectSheets" class="ghost big">Disconnect Google Sheets</button>
+      </div>
+      <div class="card">
+        <h3>Universal export</h3>
+        <p class="muted">Your golf data is stored in Supabase regardless of login provider. Google Sheets is optional and can be connected or disconnected without affecting your rounds.</p>
       </div>
     </section>
 

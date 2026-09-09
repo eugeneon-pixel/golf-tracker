@@ -41,3 +41,7 @@
   .wizard-nav{position:sticky;bottom:calc(4px + env(safe-area-inset-bottom));z-index:20;background:linear-gradient(to bottom,rgba(244,247,245,.4),var(--bg) 25%);padding-top:10px;margin-bottom:0}
   .wizard-nav button{box-shadow:0 4px 14px rgba(0,0,0,.08)}
 }
+
+/* v6.6 authentication + integrations */
+.auth-provider-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.auth-provider{margin-top:0!important}.auth-divider{display:flex;align-items:center;gap:10px;margin:15px 0 12px;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.auth-divider:before,.auth-divider:after{content:"";height:1px;background:var(--line);flex:1}.auth-message{min-height:18px;margin-top:8px}.error-text{color:#9b2c36}.integration-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.integration-heading h3{margin-bottom:4px}.integration-detail{margin:8px 0 12px}.badge.connected{background:var(--greenbg);color:#205f38}.auth-only-button.hidden{display:none!important}
+@media(max-width:460px){.auth-provider-grid{grid-template-columns:1fr}.integration-heading{display:block}.integration-heading .badge{display:inline-block;margin-bottom:8px}}

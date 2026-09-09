@@ -1,6 +1,6 @@
 const CLUBS=["","Driver","3W","5W","7W","4 Hybrid","2i","3i","4i","5i","6i","7i","8i","9i","PW","48°","GW","50°","52°","54°","56°","58°","60°","Putter","Other"];
 const $=id=>document.getElementById(id);
-let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null,supabase:null,sgRound:null,sgHole:1,sgReturnView:"homeView",sgRoundIsDraft:false,courseProfiles:[],bagClubs:[],selectedTee:"White",libraryTee:"White",courseReturnView:"homeView",entryStep:"setup"};
+let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null,supabase:null,sgRound:null,sgHole:1,sgReturnView:"homeView",sgRoundIsDraft:false,courseProfiles:[],bagClubs:[],selectedTee:"White",libraryTee:"White",courseReturnView:"homeView",entryStep:"setup",passwordRecovery:false,googleSheetsEmail:""};
 
 function uid(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`}
 function today(){return new Date().toISOString().slice(0,10)}
@@ -50,7 +50,7 @@ const EXPECTED={
   Recovery:[[10,2.55],[20,2.70],[40,2.95],[60,3.15],[80,3.32],[100,3.48],[140,3.75],[180,4.00],[220,4.22],[280,4.55]]
 };
 
-function requireUser(){if(!state.user){alert("Sign in with Google first so this round is stored under the correct user.");return false}return true}
+function requireUser(){if(!state.user){alert("Sign in to Golf Tracker first so this round is stored under the correct user.");return false}return true}
 function migrateLegacyRoundsForFirstUser(){
   const legacy=JSON.parse(localStorage.getItem("golfRounds")||"[]");
   const existing=getRounds();
@@ -69,15 +69,17 @@ function normalizeSupabaseUser(u){return u?{id:u.id,sub:u.id,email:u.email||"",n
 async function initV6Auth(){
   const c=config();
   if(!c.SUPABASE_URL||!c.SUPABASE_PUBLISHABLE_KEY||String(c.SUPABASE_URL).includes("YOUR-PROJECT")){
-    setAuthStatus("Supabase is not configured yet. Complete the v6 README setup.",false);return;
+    setAuthStatus("Supabase is not configured yet. Complete the v6.6 README setup.",false);return;
   }
   state.supabase=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-  const {data:{session}}=await state.supabase.auth.getSession();
-  if(session?.user)await applySupabaseSession(session.user);
+  if(location.hash.includes("type=recovery")||new URLSearchParams(location.search).get("type")==="recovery")state.passwordRecovery=true;
   state.supabase.auth.onAuthStateChange(async(event,session)=>{
+    if(event==="PASSWORD_RECOVERY")state.passwordRecovery=true;
     if(session?.user){await applySupabaseSession(session.user)}
-    else if(event==="SIGNED_OUT"){state.user=null;localStorage.removeItem("golfLastUser");renderHome()}
+    else if(event==="SIGNED_OUT"){state.user=null;state.passwordRecovery=false;localStorage.removeItem("golfLastUser");renderAuth();renderHome()}
   });
+  const {data:{session}}=await state.supabase.auth.getSession();
+  if(session?.user)await applySupabaseSession(session.user);else renderAuth();
 }
 async function applySupabaseSession(u){
   state.user=normalizeSupabaseUser(u);localStorage.setItem("golfLastUser",JSON.stringify(state.user));migrateLegacyRoundsForFirstUser();
@@ -86,22 +88,55 @@ async function applySupabaseSession(u){
   try{await loadBagMap()}catch(e){console.warn("Bag map load failed",e)}
   renderAuth();renderHome();maybeResumeDraft();
 }
-async function requestDatabaseSignIn(){
+async function requestOAuthSignIn(provider){
   if(!state.supabase){await initV6Auth();if(!state.supabase)return}
   const redirectTo=location.origin+location.pathname;
-  const {error}=await state.supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo}});
+  const options={redirectTo};
+  if(provider==="azure")options.scopes="email";
+  const {error}=await state.supabase.auth.signInWithOAuth({provider,options});
   if(error)alert(error.message);
 }
-async function databaseSignOut(){if(state.supabase)await state.supabase.auth.signOut();state.user=null;state.accessToken=null;state.spreadsheetId=null;state.spreadsheetUrl=null;localStorage.removeItem("golfLastUser");renderHome()}
+function authCredentials(){return {email:$("authEmail").value.trim(),password:$("authPassword").value}}
+function setAuthMessage(message,isError=false){const el=$("authMessage");if(!el)return;el.textContent=message||"";el.classList.toggle("error-text",!!isError)}
+async function emailPasswordSignIn(){
+  if(!state.supabase){await initV6Auth();if(!state.supabase)return}
+  const {email,password}=authCredentials();if(!email||!password){setAuthMessage("Enter your email and password.",true);return}
+  setAuthMessage("Signing in…");const {error}=await state.supabase.auth.signInWithPassword({email,password});
+  if(error)setAuthMessage(error.message,true);else setAuthMessage("");
+}
+async function emailPasswordSignUp(){
+  if(!state.supabase){await initV6Auth();if(!state.supabase)return}
+  const {email,password}=authCredentials();if(!email||!password){setAuthMessage("Enter an email and password to create your account.",true);return}
+  if(password.length<8){setAuthMessage("Use a password of at least 8 characters.",true);return}
+  const emailRedirectTo=location.origin+location.pathname;setAuthMessage("Creating account…");
+  const {data,error}=await state.supabase.auth.signUp({email,password,options:{emailRedirectTo}});
+  if(error){setAuthMessage(error.message,true);return}
+  if(data.session)setAuthMessage("");else setAuthMessage("Account created. Check your email to verify your address, then return here to sign in.");
+}
+async function sendPasswordReset(){
+  if(!state.supabase){await initV6Auth();if(!state.supabase)return}
+  const email=$("authEmail").value.trim();if(!email){setAuthMessage("Enter your email address first.",true);return}
+  const redirectTo=location.origin+location.pathname;const {error}=await state.supabase.auth.resetPasswordForEmail(email,{redirectTo});
+  setAuthMessage(error?error.message:"Password reset email sent. Open the link in that email on this device.",!!error);
+}
+async function saveRecoveredPassword(){
+  const p=$("newPassword").value,c=$("confirmNewPassword").value;if(p.length<8){alert("Use a password of at least 8 characters.");return}if(p!==c){alert("The passwords do not match.");return}
+  const {error}=await state.supabase.auth.updateUser({password:p});if(error){alert(error.message);return}state.passwordRecovery=false;$("newPassword").value="";$("confirmNewPassword").value="";renderAuth();alert("Password updated.");
+}
+async function databaseSignOut(){if(state.supabase)await state.supabase.auth.signOut();state.user=null;state.passwordRecovery=false;state.accessToken=null;state.googleSheetsEmail="";state.spreadsheetId=null;state.spreadsheetUrl=null;localStorage.removeItem("golfLastUser");renderAuth();renderHome()}
 function setAuthStatus(message,signedIn){
-  if($("signedOutPanel"))$("signedOutPanel").classList.toggle("hidden",!!signedIn);
-  if($("signedInPanel"))$("signedInPanel").classList.toggle("hidden",!signedIn);
+  const recovering=!!state.passwordRecovery;
+  if($("signedOutPanel"))$("signedOutPanel").classList.toggle("hidden",!!signedIn||recovering);
+  if($("signedInPanel"))$("signedInPanel").classList.toggle("hidden",!signedIn||recovering);
+  if($("passwordRecoveryPanel"))$("passwordRecoveryPanel").classList.toggle("hidden",!recovering);
   if(message&&$("sheetStatus"))$("sheetStatus").textContent=message;
 }
 function renderAuth(){
   const signed=!!state.user;setAuthStatus(signed?"Cloud database connected":"Sign in to your secure cloud database",signed);
-  if(signed){$("accountName").textContent=state.user.name||"Golfer";$("accountEmail").textContent=state.user.email||"";$("openSpreadsheet").disabled=!state.spreadsheetId;$("googleReconnect").textContent=state.accessToken?"Sheets connected":"Connect Sheets"}
+  if(signed){$("accountName").textContent=state.user.name||"Golfer";$("accountEmail").textContent=state.user.email||""}
   document.querySelectorAll("[data-holes]").forEach(b=>b.classList.toggle("auth-required",!signed));
+  document.querySelectorAll(".auth-only-button").forEach(b=>b.classList.toggle("hidden",!signed));
+  renderIntegrations();
 }
 
 // Optional Google Sheets export. Supabase remains the source of truth.
@@ -111,15 +146,28 @@ function initGoogleAuth(){
   state.tokenClient=google.accounts.oauth2.initTokenClient({client_id:clientId,scope:GOOGLE_SCOPES,callback:handleTokenResponse});
 }
 function requestGoogleAccess({selectAccount=false}={}){if(!state.tokenClient){initGoogleAuth();setTimeout(()=>state.tokenClient?.requestAccessToken({prompt:selectAccount?"select_account":"consent"}),400);return}state.tokenClient.requestAccessToken({prompt:selectAccount?"select_account":""})}
-async function handleTokenResponse(resp){if(resp.error){alert(`Google Sheets connection failed: ${resp.error}`);return}state.accessToken=resp.access_token;try{await ensureUserSpreadsheet();renderAuth();alert("Google Sheets export connected. The database remains the source of truth.")}catch(e){alert(e.message)}}
+async function handleTokenResponse(resp){if(resp.error){alert(`Google Sheets connection failed: ${resp.error}`);return}state.accessToken=resp.access_token;try{try{const u=await googleFetch("https://www.googleapis.com/oauth2/v3/userinfo");state.googleSheetsEmail=u?.email||""}catch{}await ensureUserSpreadsheet();renderIntegrations();renderAuth();alert("Google Sheets connected. Supabase remains the source of truth.")}catch(e){alert(e.message)}}
+function renderIntegrations(){
+  if(!$("googleSheetsBadge"))return;const connected=!!state.accessToken;
+  $("googleSheetsBadge").textContent=connected?"Connected":"Not connected";$("googleSheetsBadge").classList.toggle("connected",connected);
+  $("googleReconnect").textContent=connected?"Reconnect / change Google account":"Connect Google Sheets";
+  $("exportSheets").disabled=!connected;$("openSpreadsheet").disabled=!state.spreadsheetId;
+  $("disconnectSheets").disabled=!connected&&!state.spreadsheetId;
+  $("googleSheetsAccount").textContent=state.googleSheetsEmail?`Connected Google account: ${state.googleSheetsEmail}`:"Your Golf Tracker login and Google Sheets account can be different accounts.";
+}
+function disconnectGoogleSheets(){
+  const token=state.accessToken;if(token&&window.google?.accounts?.oauth2?.revoke)try{google.accounts.oauth2.revoke(token,()=>{})}catch{}
+  state.accessToken=null;state.googleSheetsEmail="";cacheWorkbook(null,null);renderIntegrations();renderAuth();
+}
+
 function loadCachedWorkbook(){const x=JSON.parse(localStorage.getItem(workbookKey())||"null");if(x){state.spreadsheetId=x.id;state.spreadsheetUrl=x.url}}
 function cacheWorkbook(id,url){if(!id){state.spreadsheetId=null;state.spreadsheetUrl=null;localStorage.removeItem(workbookKey());return}state.spreadsheetId=id;state.spreadsheetUrl=url||`https://docs.google.com/spreadsheets/d/${id}/edit`;localStorage.setItem(workbookKey(),JSON.stringify({id:state.spreadsheetId,url:state.spreadsheetUrl}))}
 async function googleFetch(url,opts={}){
-  if(!state.accessToken)throw new Error("Google authorization is required. Tap Sign in with Google.");
+  if(!state.accessToken)throw new Error("Google Sheets is not connected. Open Integrations and connect a Google account.");
   const headers={...(opts.headers||{}),Authorization:`Bearer ${state.accessToken}`};
   if(opts.body&&!headers["Content-Type"])headers["Content-Type"]="application/json";
   const res=await fetch(url,{...opts,headers});
-  if(res.status===401){state.accessToken=null;throw new Error("Google authorization expired. Tap Sign in with Google to reconnect.")}
+  if(res.status===401){state.accessToken=null;renderIntegrations();throw new Error("Google Sheets authorization expired. Open Integrations and reconnect Google Sheets.")}
   if(!res.ok){let msg=`Google API error ${res.status}`;try{const j=await res.json();msg=j.error?.message||msg}catch{}throw new Error(msg)}
   return res.status===204?null:res.json();
 }
@@ -168,7 +216,7 @@ async function syncSgRows(id,round){
   for(let i=sg.length;i<matches.length;i++)await clearValues(id,`SG Shot Detail!A${matches[i]}:M${matches[i]}`);
 }
 async function syncOne(round,{refresh=true}={}){
-  if(!requireUser())throw new Error("Sign in first.");if(!state.accessToken)throw new Error("Tap Sign in with Google to authorize spreadsheet sync.");
+  if(!requireUser())throw new Error("Sign in first.");if(!state.accessToken)throw new Error("Connect Google Sheets from Integrations before exporting.");
   await ensureUserSpreadsheet();
   await upsertByRoundId(state.spreadsheetId,"Rounds",ROUND_HEADERS,roundRow(round),round.id);await upsertHoleRows(state.spreadsheetId,round);await syncSgRows(state.spreadsheetId,round);
   let rounds=getRounds();const i=rounds.findIndex(r=>r.id===round.id);if(i>=0){rounds[i].synced=true;rounds[i].syncedAt=new Date().toISOString();rounds[i].syncedSpreadsheetId=state.spreadsheetId;setRounds(rounds)}
@@ -676,9 +724,13 @@ $("saveHole").onclick=()=>{if(saveCurrentHole()&&state.current<state.holes){load
 $("finishRound").onclick=finishRound;
 $("cancelRound").onclick=()=>{if(confirm("Cancel this round? The current draft will be removed.")){localStorage.removeItem(`golfDraft:${state.user?.sub||"guest"}`);show("homeView")}};
 $("backHome").onclick=()=>{renderHome();show("homeView")};
-$("googleSignIn").onclick=requestDatabaseSignIn;
-$("googleReconnect").onclick=()=>requestGoogleAccess({selectAccount:true});
+$("googleSignIn").onclick=()=>requestOAuthSignIn("google");
+$("microsoftSignIn").onclick=()=>requestOAuthSignIn("azure");
+$("emailSignIn").onclick=emailPasswordSignIn;$("emailSignUp").onclick=emailPasswordSignUp;$("forgotPassword").onclick=sendPasswordReset;$("saveNewPassword").onclick=saveRecoveredPassword;
+$("authPassword").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();emailPasswordSignIn()}});
 $("switchAccount").onclick=databaseSignOut;
+$("openIntegrations").onclick=()=>{renderIntegrations();show("integrationsView")};$("manageIntegrations").onclick=()=>{renderIntegrations();show("integrationsView")};$("integrationsBack").onclick=()=>{renderHome();show("homeView")};
+$("googleReconnect").onclick=()=>requestGoogleAccess({selectAccount:true});$("exportSheets").onclick=()=>exportAllToGoogleSheets().catch(e=>alert(e.message));$("disconnectSheets").onclick=disconnectGoogleSheets;
 $("openSpreadsheet").onclick=async()=>{try{if(state.spreadsheetUrl)window.open(state.spreadsheetUrl,"_blank");else await exportAllToGoogleSheets()}catch(e){alert(e.message)}};
 $("syncBtn").onclick=()=>syncAll().catch(e=>alert(e.message));
 $("syncRound").onclick=async()=>{try{const r=getRounds().find(x=>x.id===state.lastSavedId);if(r){await syncOne(r);renderHome();alert("Round saved to the cloud database.")}}catch(e){alert(e.message)}};
