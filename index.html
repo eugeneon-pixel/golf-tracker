@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v6.6</title>
+  <title>Golf Tracker v6.7</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -128,7 +128,7 @@
           <div class="field"><label>Date</label><input id="roundDate" type="date"></div>
           <div class="field"><label>Course</label><div class="inline-control"><select id="course"><option value="">Select course</option></select><button id="searchCourseQuick" class="mini-square" type="button" title="Search shared courses">⌕</button><button id="addCourseQuick" class="mini-square" type="button" title="Add course">＋</button></div></div>
         </div>
-        <div class="field"><label>Tee</label><div id="teeSelector" class="tee-radios"><button type="button" data-tee="White">White</button><button type="button" data-tee="Yellow">Yellow</button><button type="button" data-tee="Blue">Blue</button><button type="button" data-tee="Red">Red</button></div></div>
+        <div class="field"><label>Tee</label><div class="tee-entry-row"><div id="teeSelector" class="tee-radios"></div><button id="addTeeQuick" class="secondary add-tee-btn" type="button">＋ Add tee</button></div></div>
         <div class="grid2">
           <div class="field"><label>Round par</label><input id="roundPar" type="number" inputmode="numeric" value="36" readonly></div>
           <div class="field"><label>Holes</label><input id="holesCount" type="number" readonly></div>
@@ -248,7 +248,7 @@
       </div>
       <div class="card">
         <div class="grid2"><div class="field"><label>Course name</label><input id="libraryCourseName" type="text" placeholder="e.g. Howth Golf Club"></div><div class="field"><label>Holes</label><select id="libraryHoles"><option value="18">18</option><option value="9">9</option></select></div></div>
-        <div class="field"><label>Tee</label><div id="libraryTeeSelector" class="tee-radios"><button type="button" data-library-tee="White">White</button><button type="button" data-library-tee="Yellow">Yellow</button><button type="button" data-library-tee="Blue">Blue</button><button type="button" data-library-tee="Red">Red</button></div></div>
+        <div class="field"><label>Tee</label><div class="tee-entry-row"><div id="libraryTeeSelector" class="tee-radios"></div><button id="addLibraryTee" class="secondary add-tee-btn" type="button">＋ Add tee</button></div><div class="muted">Add any tee name or colour used by the course, e.g. Green, Black, Gold or Championship.</div></div>
         <div id="courseHoleEditor" class="course-hole-editor"></div>
         <button id="saveCourseProfile" class="primary big">Save course / tee</button>
       </div>

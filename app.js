@@ -1,6 +1,6 @@
 const CLUBS=["","Driver","3W","5W","7W","4 Hybrid","2i","3i","4i","5i","6i","7i","8i","9i","PW","48°","GW","50°","52°","54°","56°","58°","60°","Putter","Other"];
 const $=id=>document.getElementById(id);
-let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null,supabase:null,sgRound:null,sgHole:1,sgReturnView:"homeView",sgRoundIsDraft:false,courseProfiles:[],bagClubs:[],selectedTee:"White",libraryTee:"White",courseReturnView:"homeView",entryStep:"setup",passwordRecovery:false,googleSheetsEmail:""};
+let state={holes:9,current:1,round:null,lastSavedId:null,accessToken:null,user:null,spreadsheetId:null,spreadsheetUrl:null,tokenClient:null,supabase:null,sgRound:null,sgHole:1,sgReturnView:"homeView",sgRoundIsDraft:false,courseProfiles:[],bagClubs:[],customTees:[],selectedTee:"White",libraryTee:"White",courseReturnView:"homeView",entryStep:"setup",passwordRecovery:false,googleSheetsEmail:""};
 
 function uid(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`}
 function today(){return new Date().toISOString().slice(0,10)}
@@ -15,11 +15,31 @@ function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&l
 
 
 
-const TEE_COLORS=["White","Yellow","Blue","Red"];
+const DEFAULT_TEES=["White","Yellow","Blue","Red"];
 const PLAYABLE_CLUBS=CLUBS.filter(Boolean).filter(c=>c!=="Putter"&&c!=="Other");
 function median(a){const x=(a||[]).map(Number).filter(Number.isFinite).sort((m,n)=>m-n);if(!x.length)return null;const i=Math.floor(x.length/2);return x.length%2?x[i]:(x[i-1]+x[i])/2}
 function mode(a){const c={};for(const v of (a||[]).filter(Boolean))c[v]=(c[v]||0)+1;return Object.entries(c).sort((x,y)=>y[1]-x[1])[0]?.[0]||""}
 function setTeeButton(rootAttr,value){document.querySelectorAll(`[${rootAttr}]`).forEach(b=>b.classList.toggle("active",b.getAttribute(rootAttr)===value))}
+function normalizeTeeName(v){return String(v||"").trim().replace(/\s+/g," ")}
+function teeSortValue(v){const i=DEFAULT_TEES.findIndex(x=>x.toLowerCase()===String(v||"").toLowerCase());return i>=0?`${String(i).padStart(2,"0")}:`:`99:${String(v||"").toLowerCase()}`}
+function teeNames(){
+  const found=[];const add=v=>{v=normalizeTeeName(v);if(v&&!found.some(x=>x.toLowerCase()===v.toLowerCase()))found.push(v)};
+  DEFAULT_TEES.forEach(add);(state.customTees||[]).forEach(add);mergedCourseProfiles().forEach(p=>add(p.tee_color));
+  return found.sort((a,b)=>{const ai=DEFAULT_TEES.findIndex(x=>x.toLowerCase()===a.toLowerCase()),bi=DEFAULT_TEES.findIndex(x=>x.toLowerCase()===b.toLowerCase());if(ai>=0||bi>=0)return (ai<0?99:ai)-(bi<0?99:bi);return a.localeCompare(b)});
+}
+function renderTeeSelectors(){
+  const names=teeNames();
+  const roundRoot=$("teeSelector"),libRoot=$("libraryTeeSelector");
+  if(roundRoot)roundRoot.innerHTML=names.map(t=>`<button type="button" data-tee="${esc(t)}">${esc(t)}</button>`).join("");
+  if(libRoot)libRoot.innerHTML=names.map(t=>`<button type="button" data-library-tee="${esc(t)}">${esc(t)}</button>`).join("");
+  setTeeButton("data-tee",state.selectedTee);setTeeButton("data-library-tee",state.libraryTee);
+}
+function rememberCustomTee(name){name=normalizeTeeName(name);if(!name)return "";const existing=teeNames().find(t=>t.toLowerCase()===name.toLowerCase());if(existing)return existing;if(!DEFAULT_TEES.some(t=>t.toLowerCase()===name.toLowerCase()))state.customTees.push(name);return name}
+function addCustomTee(target){
+  const raw=prompt("Enter the tee name or colour (for example Green, Black, Gold or Championship):");if(raw===null)return;const tee=rememberCustomTee(raw);if(!tee){alert("Enter a tee name.");return}
+  if(target==="library"){state.libraryTee=tee}else{state.selectedTee=tee;if(state.round)state.round.teeColor=tee}
+  renderTeeSelectors();if(target==="library")renderCourseHoleEditor();else applyCourseProfileToRound({force:false});
+}
 function roundTee(r){return r?.teeColor||r?.raw?.teeColor||"White"}
 function profileKey(name,tee){return `${String(name||"").trim().toLowerCase()}|${tee||"White"}`}
 const GOOGLE_SCOPES="openid email profile https://www.googleapis.com/auth/drive.file";
@@ -243,7 +263,7 @@ function inferredCourseProfiles(){
   }
   return [...groups.values()].map(g=>({...g,holes:Object.fromEntries(Object.entries(g.holes).map(([n,v])=>[n,{hole_number:Number(n),par:Number(mode(v.pars.map(String)))||4,yardage:median(v.yards)||null}]))}));
 }
-function mergedCourseProfiles(){const map=new Map();for(const p of inferredCourseProfiles())map.set(profileKey(p.name,p.tee_color),p);for(const p of state.courseProfiles||[])map.set(profileKey(p.name,p.tee_color),p);return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name)||TEE_COLORS.indexOf(a.tee_color)-TEE_COLORS.indexOf(b.tee_color))}
+function mergedCourseProfiles(){const map=new Map();for(const p of inferredCourseProfiles())map.set(profileKey(p.name,p.tee_color),p);for(const p of state.courseProfiles||[])map.set(profileKey(p.name,p.tee_color),p);return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name)||teeSortValue(a.tee_color).localeCompare(teeSortValue(b.tee_color)))}
 function courseNames(){return [...new Set(mergedCourseProfiles().map(p=>p.name))].sort((a,b)=>a.localeCompare(b))}
 function refreshCourseSelect(selected=""){
   const sel=$("course");if(!sel)return;const names=courseNames();const cur=selected||sel.value||state.round?.course||"";sel.innerHTML=`<option value="">Select course</option>${names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("")}<option value="__search__">⌕ Search shared courses</option><option value="__new__">＋ Add new course</option>`;
@@ -263,7 +283,7 @@ async function loadCourseProfiles(){
   if(!state.supabase||!state.user){refreshCourseSelect();return}
   const {data,error}=await state.supabase.from("course_profiles").select("id,name,tee_color,holes_count,round_par,source,course_holes(hole_number,par,yardage)").order("name");
   if(error){console.warn("Course library unavailable until v6.3 SQL migration is run",error);state.courseProfiles=[];refreshCourseSelect();return}
-  state.courseProfiles=(data||[]).map(p=>({...p,holes:Object.fromEntries((p.course_holes||[]).map(h=>[h.hole_number,h]))}));refreshCourseSelect();renderSavedCourseProfiles();
+  state.courseProfiles=(data||[]).map(p=>({...p,holes:Object.fromEntries((p.course_holes||[]).map(h=>[h.hole_number,h]))}));renderTeeSelectors();refreshCourseSelect();renderSavedCourseProfiles();
 }
 function personalClubStats(){
   const byClub={};for(const r of getRounds())for(const h of r.holesData||[]){for(const pair of [[h.approachClub,h.approachYds],[h.secondShotClub,h.secondShotYds]]){const [club,dist]=pair;if(club&&Number(dist)>0){(byClub[club]??=[]).push(Number(dist))}}}
@@ -291,7 +311,7 @@ async function searchSharedCourses(){
 }
 async function useSharedCourse(index){
   const root=$("sharedCourseResults"),c=root._sharedResults?.[index];if(!c)return;const hmap={};for(const h of c.holes||[])hmap[h.hole_number]={hole_number:Number(h.hole_number),par:Number(h.par)||4,yardage:h.yardage==null?null:Number(h.yardage)};
-  try{await saveCourseProfileObject({name:c.name,tee_color:c.tee_color,holes_count:Number(c.holes_count)||18,round_par:Number(c.round_par)||72,holes:hmap,source:"shared"});if(state.courseReturnView==="roundView"&&state.round){state.round.course=c.name;state.selectedTee=c.tee_color;refreshCourseSelect(c.name);setTeeButton("data-tee",state.selectedTee);applyCourseProfileToRound({force:false});show("roundView")}else{alert(`${c.name} • ${c.tee_color} added to your Course Library.`);renderSavedCourseProfiles()}}catch(e){alert(e.message)}
+  try{await saveCourseProfileObject({name:c.name,tee_color:c.tee_color,holes_count:Number(c.holes_count)||18,round_par:Number(c.round_par)||72,holes:hmap,source:"shared"});if(state.courseReturnView==="roundView"&&state.round){state.round.course=c.name;state.selectedTee=rememberCustomTee(c.tee_color);renderTeeSelectors();refreshCourseSelect(c.name);setTeeButton("data-tee",state.selectedTee);applyCourseProfileToRound({force:false});show("roundView")}else{alert(`${c.name} • ${c.tee_color} added to your Course Library.`);renderSavedCourseProfiles()}}catch(e){alert(e.message)}
 }
 function exactHistoricalClub(type,hole){const name=state.round?.course,tee=state.selectedTee;if(!name)return"";const vals=[];for(const r of getRounds()){if(String(r.course||"").toLowerCase()!==String(name).toLowerCase()||roundTee(r)!==tee)continue;const h=r.holesData?.[hole-1];if(!h)continue;const c=type==="tee"?h.teeClub:type==="second"?h.secondShotClub:h.approachClub;if(c)vals.push(c)}return mode(vals)}
 function suggestClub(type,distance,hole=state.current){
@@ -314,7 +334,7 @@ async function saveCourseProfileObject(obj){
 }
 async function saveCourseFromEditor(){const name=$("libraryCourseName").value.trim();if(!name){alert("Enter a course name.");return}const holes=Number($("libraryHoles").value)||18,hmap={};for(let i=1;i<=holes;i++){const par=Number(document.querySelector(`[data-course-par="${i}"]`).value)||4,y=Number(document.querySelector(`[data-course-yard="${i}"]`).value)||null;hmap[i]={hole_number:i,par,yardage:y}}const rp=Object.values(hmap).reduce((a,h)=>a+h.par,0);try{await saveCourseProfileObject({name,tee_color:state.libraryTee,holes_count:holes,round_par:rp,holes:hmap,source:"manual"});if(state.courseReturnView==="roundView"&&state.round){state.round.course=name;state.selectedTee=state.libraryTee;refreshCourseSelect(name);setTeeButton("data-tee",state.selectedTee);applyCourseProfileToRound({force:false})}alert("Course / tee saved.");renderSavedCourseProfiles()}catch(e){alert(e.message)}}
 function parseCsvLine(line){const out=[];let s="",q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){if(q&&line[i+1]==='"'){s+='"';i++}else q=!q}else if(c===','&&!q){out.push(s.trim());s=""}else s+=c}out.push(s.trim());return out}
-async function importCourseCsv(){const f=$("courseCsv").files?.[0];if(!f){alert("Choose a CSV file first.");return}const text=await f.text(),lines=text.split(/\r?\n/).filter(x=>x.trim());if(lines.length<2){alert("CSV has no data rows.");return}const hdr=parseCsvLine(lines[0]).map(x=>x.toLowerCase().trim()),need=["course","tee","hole","par","yardage"];if(need.some(x=>!hdr.includes(x))){alert(`CSV must contain: ${need.join(", ")}`);return}const groups={};for(const line of lines.slice(1)){const a=parseCsvLine(line),o=Object.fromEntries(hdr.map((h,i)=>[h,a[i]??""])),name=o.course.trim(),tee=(TEE_COLORS.find(t=>t.toLowerCase()===o.tee.toLowerCase())||o.tee||"White");if(!name)continue;const key=profileKey(name,tee);groups[key]??={name,tee_color:tee,holes_count:Number(o.holes)||18,holes:{},source:"csv"};groups[key].holes[Number(o.hole)]={hole_number:Number(o.hole),par:Number(o.par)||4,yardage:Number(o.yardage)||null}}
+async function importCourseCsv(){const f=$("courseCsv").files?.[0];if(!f){alert("Choose a CSV file first.");return}const text=await f.text(),lines=text.split(/\r?\n/).filter(x=>x.trim());if(lines.length<2){alert("CSV has no data rows.");return}const hdr=parseCsvLine(lines[0]).map(x=>x.toLowerCase().trim()),need=["course","tee","hole","par","yardage"];if(need.some(x=>!hdr.includes(x))){alert(`CSV must contain: ${need.join(", ")}`);return}const groups={};for(const line of lines.slice(1)){const a=parseCsvLine(line),o=Object.fromEntries(hdr.map((h,i)=>[h,a[i]??""])),name=o.course.trim(),tee=rememberCustomTee(o.tee||"White");if(!name)continue;const key=profileKey(name,tee);groups[key]??={name,tee_color:tee,holes_count:Number(o.holes)||18,holes:{},source:"csv"};groups[key].holes[Number(o.hole)]={hole_number:Number(o.hole),par:Number(o.par)||4,yardage:Number(o.yardage)||null}}
   try{for(const g of Object.values(groups)){g.holes_count=Math.max(g.holes_count,...Object.keys(g.holes).map(Number));g.round_par=Object.values(g.holes).reduce((a,h)=>a+h.par,0);await saveCourseProfileObject(g)}alert(`${Object.keys(groups).length} course / tee profile(s) imported.`)}catch(e){alert(e.message)}}
 function downloadCourseTemplate(){const rows=["course,tee,hole,par,yardage,holes"];for(let i=1;i<=18;i++)rows.push(`Example Golf Club,White,${i},${[4,4,3,5][(i-1)%4]},,18`);const blob=new Blob([rows.join("\n")],{type:"text/csv"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="golf_course_import_template.csv";a.click();URL.revokeObjectURL(a.href)}
 
@@ -699,9 +719,10 @@ async function exportOneToSheet(round,{refresh=true}={}){await ensureUserSpreads
 document.querySelectorAll("[data-holes]").forEach(b=>b.addEventListener("click",()=>startRoundGuarded(Number(b.dataset.holes))));
 document.querySelectorAll(".segmented button").forEach(b=>b.addEventListener("click",()=>{b.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("active"));b.classList.add("active");updateConditionalFields()}));
 document.querySelectorAll("[data-club-step]").forEach(b=>b.addEventListener("click",()=>stepClub(b.dataset.clubStep,Number(b.dataset.dir))));
-document.querySelectorAll("[data-tee]").forEach(b=>b.addEventListener("click",()=>{state.selectedTee=b.dataset.tee;setTeeButton("data-tee",state.selectedTee);applyCourseProfileToRound({force:false})}));
-document.querySelectorAll("[data-library-tee]").forEach(b=>b.addEventListener("click",()=>{state.libraryTee=b.dataset.libraryTee;setTeeButton("data-library-tee",state.libraryTee);renderCourseHoleEditor()}));
-$("course").addEventListener("change",()=>{if($("course").value==="__new__"){state.courseReturnView="roundView";show("courseLibraryView");$("libraryCourseName").focus();return}if($("course").value==="__search__"){state.courseReturnView="roundView";show("courseLibraryView");$("sharedCourseSearch").focus();return}if(state.round){state.round.course=$("course").value;applyCourseProfileToRound({force:false})}});
+$("teeSelector").addEventListener("click",e=>{const b=e.target.closest("[data-tee]");if(!b)return;state.selectedTee=b.dataset.tee;setTeeButton("data-tee",state.selectedTee);applyCourseProfileToRound({force:false})});
+$("libraryTeeSelector").addEventListener("click",e=>{const b=e.target.closest("[data-library-tee]");if(!b)return;state.libraryTee=b.dataset.libraryTee;setTeeButton("data-library-tee",state.libraryTee);renderCourseHoleEditor()});
+$("addTeeQuick").onclick=()=>addCustomTee("round");$("addLibraryTee").onclick=()=>addCustomTee("library");
+$("course").addEventListener("change",()=>{if($("course").value==="__new__"){state.courseReturnView="roundView";show("courseLibraryView");$("libraryCourseName").focus();return}if($("course").value==="__search__"){state.courseReturnView="roundView";show("courseLibraryView");$("sharedCourseSearch").focus();return}if(state.round){state.round.course=$("course").value;renderTeeSelectors();applyCourseProfileToRound({force:false})}});
 $("addCourseQuick").onclick=()=>{state.courseReturnView="roundView";show("courseLibraryView");$("libraryCourseName").value="";renderCourseHoleEditor()};
 $("searchCourseQuick").onclick=()=>{state.courseReturnView="roundView";show("courseLibraryView");$("sharedCourseSearch").focus()};
 $("parMinus").onclick=()=>adjustPar(-1);$("parPlus").onclick=()=>adjustPar(1);$("scoreMinus").onclick=()=>adjustScore(-1);$("scorePlus").onclick=()=>adjustScore(1);$("penaltyMinus").onclick=()=>adjustPenalty(-1);$("penaltyPlus").onclick=()=>adjustPenalty(1);
@@ -736,10 +757,10 @@ $("syncBtn").onclick=()=>syncAll().catch(e=>alert(e.message));
 $("syncRound").onclick=async()=>{try{const r=getRounds().find(x=>x.id===state.lastSavedId);if(r){await syncOne(r);renderHome();alert("Round saved to the cloud database.")}}catch(e){alert(e.message)}};
 $("addSgFromSummary").onclick=()=>{const id=state.lastSavedId||state.round?.id;if(id)openSgRound(id)};$("sgDuringRound").onclick=openSgDuringRound;
 $("sgBack").onclick=()=>{saveSgRound({silent:true});if(state.sgReturnView==="roundView"){loadHole(state.current);show("roundView");setEntryStep("review")}else{renderHome();show("homeView")}};$("sgSave").onclick=saveSgRound;$("sgSaveBottom").onclick=saveSgRound;$("sgBenchmark").onchange=()=>{state.sgRound.sg.benchmark=$("sgBenchmark").value;renderSgHeader();renderSgHole()};$("sgPrevHole").onclick=()=>{if(state.sgHole>1){state.sgHole--;renderSgHole();renderSgHeader()}};$("sgNextHole").onclick=()=>{if(state.sgHole<state.sgRound.holesCount){state.sgHole++;renderSgHole();renderSgHeader()}};
-$("openDashboard").onclick=openDashboard;$("openBagMap").onclick=()=>{renderBagMap();show("bagMapView")};$("bagMapBack").onclick=()=>{renderHome();show("homeView")};$("saveBagMap").onclick=saveBagMap;$("runSharedCourseSearch").onclick=searchSharedCourses;$("sharedCourseSearch").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();searchSharedCourses()}});$("sharedCourseResults").addEventListener("click",e=>{const b=e.target.closest("[data-use-shared]");if(b)useSharedCourse(Number(b.dataset.useShared))});$("openCourseLibrary").onclick=()=>{state.courseReturnView="homeView";state.libraryTee="White";setTeeButton("data-library-tee",state.libraryTee);renderCourseHoleEditor();renderSavedCourseProfiles();show("courseLibraryView")};$("courseLibraryBack").onclick=()=>{refreshCourseSelect(state.round?.course||"");show(state.courseReturnView||"homeView")};$("libraryHoles").onchange=renderCourseHoleEditor;$("libraryCourseName").addEventListener("change",renderCourseHoleEditor);$("saveCourseProfile").onclick=saveCourseFromEditor;$("importCourseCsv").onclick=importCourseCsv;$("downloadCourseTemplate").onclick=downloadCourseTemplate;$("savedCourseProfiles").addEventListener("click",e=>{const b=e.target.closest("[data-edit-course]");if(!b)return;$("libraryCourseName").value=b.dataset.editCourse;state.libraryTee=b.dataset.editTee;setTeeButton("data-library-tee",state.libraryTee);const p=mergedCourseProfiles().find(x=>profileKey(x.name,x.tee_color)===profileKey(b.dataset.editCourse,b.dataset.editTee));if(p)$("libraryHoles").value=p.holes_count;renderCourseHoleEditor();window.scrollTo({top:0,behavior:"smooth"})});
+$("openDashboard").onclick=openDashboard;$("openBagMap").onclick=()=>{renderBagMap();show("bagMapView")};$("bagMapBack").onclick=()=>{renderHome();show("homeView")};$("saveBagMap").onclick=saveBagMap;$("runSharedCourseSearch").onclick=searchSharedCourses;$("sharedCourseSearch").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();searchSharedCourses()}});$("sharedCourseResults").addEventListener("click",e=>{const b=e.target.closest("[data-use-shared]");if(b)useSharedCourse(Number(b.dataset.useShared))});$("openCourseLibrary").onclick=()=>{state.courseReturnView="homeView";state.libraryTee="White";setTeeButton("data-library-tee",state.libraryTee);renderCourseHoleEditor();renderSavedCourseProfiles();show("courseLibraryView")};$("courseLibraryBack").onclick=()=>{refreshCourseSelect(state.round?.course||"");show(state.courseReturnView||"homeView")};$("libraryHoles").onchange=renderCourseHoleEditor;$("libraryCourseName").addEventListener("change",()=>{renderTeeSelectors();renderCourseHoleEditor()});$("saveCourseProfile").onclick=saveCourseFromEditor;$("importCourseCsv").onclick=importCourseCsv;$("downloadCourseTemplate").onclick=downloadCourseTemplate;$("savedCourseProfiles").addEventListener("click",e=>{const b=e.target.closest("[data-edit-course]");if(!b)return;$("libraryCourseName").value=b.dataset.editCourse;state.libraryTee=rememberCustomTee(b.dataset.editTee);renderTeeSelectors();setTeeButton("data-library-tee",state.libraryTee);const p=mergedCourseProfiles().find(x=>profileKey(x.name,x.tee_color)===profileKey(b.dataset.editCourse,b.dataset.editTee));if(p)$("libraryHoles").value=p.holes_count;renderCourseHoleEditor();window.scrollTo({top:0,behavior:"smooth"})});
 $("openDashboard").onclick=openDashboard;$("dashboardBack").onclick=()=>{renderHome();show("homeView")};$("refreshDashboard").onclick=refreshDashboardView;$("dashboardCourse").onchange=refreshDashboardView;$("dashboardBenchmark").onchange=refreshDashboardView;
 
-populateClubs();setTeeButton("data-tee",state.selectedTee);setTeeButton("data-library-tee",state.libraryTee);renderCourseHoleEditor();refreshCourseSelect();
+populateClubs();renderTeeSelectors();renderCourseHoleEditor();refreshCourseSelect();
 renderHome();initGoogleAuth();initV6Auth();
 const draftKey=()=>`golfDraft:${state.user?.sub||"guest"}`;
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js");
