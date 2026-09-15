@@ -281,7 +281,7 @@ function applyCourseProfileToRound({force=false}={}){
 }
 async function loadCourseProfiles(){
   if(!state.supabase||!state.user){refreshCourseSelect();return}
-  const {data,error}=await state.supabase.from("course_profiles").select("id,name,tee_color,holes_count,round_par,source,course_holes(hole_number,par,yardage,front_lat,front_lng,middle_lat,middle_lng,back_lat,back_lng)").order("name");
+  const {data,error}=await state.supabase.from("course_profiles").select("id,name,tee_color,holes_count,round_par,source,external_provider,external_course_id,course_holes(hole_number,par,yardage,front_lat,front_lng,middle_lat,middle_lng,back_lat,back_lng)").order("name");
   if(error){console.warn("Course library unavailable until v6.3 SQL migration is run",error);state.courseProfiles=[];refreshCourseSelect();return}
   state.courseProfiles=(data||[]).map(p=>({...p,holes:Object.fromEntries((p.course_holes||[]).map(h=>[h.hole_number,h]))}));renderTeeSelectors();refreshCourseSelect();renderSavedCourseProfiles();
 }
@@ -308,8 +308,104 @@ async function saveBagMap(){
   if(!state.supabase||!state.user){alert("Sign in first.");return}const rows=[];document.querySelectorAll("[data-bag-club]").forEach((el,i)=>{if(el.value!=="")rows.push({user_id:state.user.sub,club_name:el.dataset.bagClub,target_distance_yards:Number(el.value),sort_order:i,updated_at:new Date().toISOString()})});
   try{const del=await state.supabase.from("user_bag_clubs").delete().eq("user_id",state.user.sub);if(del.error)throw del.error;if(rows.length){const q=await state.supabase.from("user_bag_clubs").insert(rows);if(q.error)throw q.error}await loadBagMap();alert("Bag map saved. Smart club suggestions will use these yardages.")}catch(e){alert(e.message)}
 }
+
+const ONLINE_COURSE_API="https://api.opengolfapi.org";
+function firstDefined(...v){return v.find(x=>x!==undefined&&x!==null&&x!=="")}
+function asArray(v){return Array.isArray(v)?v:(Array.isArray(v?.data)?v.data:Array.isArray(v?.results)?v.results:Array.isArray(v?.courses)?v.courses:[])}
+function latLngFrom(v){
+  if(!v)return null;
+  const lat=Number(firstDefined(v.lat,v.latitude,v.y)),lng=Number(firstDefined(v.lng,v.lon,v.longitude,v.x));
+  if(Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180)return {lat,lng};
+  if(v.type==="Point"&&Array.isArray(v.coordinates)){const [x,y]=v.coordinates.map(Number);if(Number.isFinite(x)&&Number.isFinite(y))return {lat:y,lng:x}}
+  if(v.geometry)return latLngFrom(v.geometry);
+  return null;
+}
+function polygonPoints(v,out=[]){
+  if(!v)return out;const c=v?.geometry?.coordinates||v?.coordinates;
+  const walk=x=>{if(Array.isArray(x)&&x.length>=2&&typeof x[0]==="number"&&typeof x[1]==="number"){const [lng,lat]=x;if(Math.abs(lat)<=90&&Math.abs(lng)<=180)out.push({lat,lng})}else if(Array.isArray(x))x.forEach(walk)};
+  if(c)walk(c);return out;
+}
+function objectByKeys(obj,keys){
+  if(!obj||typeof obj!=="object")return null;
+  for(const k of keys){if(obj[k]!=null)return obj[k]}
+  for(const [k,v] of Object.entries(obj)){if(keys.some(x=>k.toLowerCase().includes(x))&&v&&typeof v==="object")return v}
+  return null;
+}
+function centroid(points){if(!points.length)return null;return {lat:points.reduce((a,p)=>a+p.lat,0)/points.length,lng:points.reduce((a,p)=>a+p.lng,0)/points.length}}
+function deriveGreenGeometry(hole,teePoint){
+  const green=objectByKeys(hole,["green","green_geometry","greenGeoJSON","putting_green","green_polygon","green_center"]);
+  let middle=latLngFrom(green)||latLngFrom(hole.green_center)||latLngFrom(hole.greenCenter);
+  const pts=polygonPoints(green);
+  if(!middle&&pts.length)middle=centroid(pts);
+  let front=latLngFrom(hole.green_front)||latLngFrom(hole.front_green)||latLngFrom(hole.front);
+  let back=latLngFrom(hole.green_back)||latLngFrom(hole.back_green)||latLngFrom(hole.back);
+  if(pts.length&&teePoint){
+    const ranked=[...pts].map(p=>({p,d:haversineYards(teePoint,p)})).sort((a,b)=>a.d-b.d);
+    front=front||ranked[0]?.p;back=back||ranked[ranked.length-1]?.p;
+  }
+  return {front,middle,back};
+}
+function teeLabel(t,i){return String(firstDefined(t.name,t.tee_name,t.teeName,t.color,t.colour,t.label,`Tee ${i+1}`))}
+function teeHoleYardage(tee,holeNo){
+  const hs=asArray(firstDefined(tee.holes,tee.hole_yardages,tee.yardages));
+  const h=hs.find((x,i)=>Number(firstDefined(x.hole,x.hole_number,x.number,i+1))===holeNo);
+  return Number(firstDefined(h?.yardage,h?.yards,h?.distance,h?.length,typeof h==="number"?h:null))||null;
+}
+async function onlineJson(path){
+  const r=await fetch(`${ONLINE_COURSE_API}${path}`,{headers:{"Accept":"application/json"}});
+  if(!r.ok)throw new Error(`Online course database returned ${r.status}`);return r.json();
+}
+async function searchOnlineCourses(q){
+  const root=$("onlineCourseResults");if(!root)return;root.innerHTML=`<p class="muted">Searching worldwide course catalogue…</p>`;
+  try{
+    const raw=await onlineJson(`/v1/courses/search?q=${encodeURIComponent(q)}&limit=12`),rows=asArray(raw);
+    root._onlineResults=rows;
+    root.innerHTML=rows.length?`<div class="eyebrow">ONLINE COURSE DATABASE</div>`+rows.map((c,i)=>{
+      const name=firstDefined(c.name,c.course_name,c.courseName,"Course"),place=[firstDefined(c.city,c.town),firstDefined(c.state,c.region),firstDefined(c.country,c.country_code)].filter(Boolean).join(", ");
+      return `<div class="course-profile-item online-course-item"><div><strong>${esc(name)}</strong><span class="course-source-badge">ONLINE</span><div class="muted">${esc(place||"Worldwide course catalogue")}</div></div><button class="secondary" data-online-course="${i}">View tees</button></div>`
+    }).join(""):`<p class="muted">No online matches found.</p>`;
+  }catch(e){root.innerHTML=`<p class="muted">Online catalogue unavailable: ${esc(e.message)}</p>`}
+}
+async function loadOnlineCourse(index){
+  const root=$("onlineCourseResults"),c=root._onlineResults?.[index];if(!c)return;
+  const id=firstDefined(c.id,c.course_id,c.courseId,c.uuid);if(!id){alert("This online result has no course identifier.");return}
+  root.innerHTML=`<p class="muted">Loading scorecard, tees and GPS geometry…</p>`;
+  try{
+    const [detailRaw,holesRaw,teesRaw]=await Promise.all([
+      onlineJson(`/v1/courses/${encodeURIComponent(id)}`).catch(()=>c),
+      onlineJson(`/v1/courses/${encodeURIComponent(id)}/holes`).catch(()=>({data:[]})),
+      onlineJson(`/v1/courses/${encodeURIComponent(id)}/tees`).catch(()=>({data:[]}))
+    ]);
+    const detail=detailRaw?.data||detailRaw,holes=asArray(holesRaw).length?asArray(holesRaw):asArray(firstDefined(detail.holes,detail.scorecard)),tees=asArray(teesRaw).length?asArray(teesRaw):asArray(detail.tees);
+    root._onlineLoaded={id,detail,holes,tees};
+    const name=firstDefined(detail.name,detail.course_name,c.name,"Course");
+    const teeButtons=(tees.length?tees:[{name:"Default"}]).map((t,i)=>`<button class="secondary" data-import-online-tee="${i}">${esc(teeLabel(t,i))}</button>`).join("");
+    root.innerHTML=`<div class="card"><strong>${esc(name)}</strong><div class="muted">${holes.length||detail.holes||18} holes • choose a tee to import</div><div class="online-course-actions top-gap">${teeButtons}</div><p class="muted top-gap">GPS availability depends on the geometry supplied for each hole. Golf Tracker derives Front / Middle / Back automatically when green geometry supports it.</p></div>`;
+  }catch(e){root.innerHTML=`<p class="muted">Could not load course details: ${esc(e.message)}</p>`}
+}
+async function importOnlineCourseTee(teeIndex){
+  const loaded=$("onlineCourseResults")._onlineLoaded;if(!loaded)return;
+  const {id,detail,holes,tees}=loaded,tee=tees[teeIndex]||{name:"Default"},name=String(firstDefined(detail.name,detail.course_name,"Course")),teeName=rememberCustomTee(teeLabel(tee,teeIndex));
+  const hmap={};for(let i=1;i<=Math.max(holes.length,Number(detail.holes)||18);i++){
+    const h=holes.find((x,j)=>Number(firstDefined(x.hole,x.hole_number,x.number,j+1))===i)||{};
+    const teeObj=objectByKeys(h,["tee","tee_box","teeing_ground"])||tee;
+    const teePoint=latLngFrom(teeObj);const g=deriveGreenGeometry(h,teePoint);
+    const yard=teeHoleYardage(tee,i)||Number(firstDefined(h.yardage,h.yards,h.distance,h.length))||null;
+    hmap[i]={hole_number:i,par:Number(firstDefined(h.par,h.par_value,4))||4,yardage:yard,
+      front_lat:g.front?.lat??null,front_lng:g.front?.lng??null,middle_lat:g.middle?.lat??null,middle_lng:g.middle?.lng??null,back_lat:g.back?.lat??null,back_lng:g.back?.lng??null};
+  }
+  const holesCount=Object.keys(hmap).length||18,roundPar=Object.values(hmap).reduce((a,h)=>a+Number(h.par||0),0)||Number(detail.par)||72;
+  try{
+    await saveCourseProfileObject({name,tee_color:teeName,holes_count:holesCount,round_par:roundPar,holes:hmap,source:"opengolf",external_provider:"OpenGolfAPI",external_course_id:String(id)});
+    const mapped=Object.values(hmap).filter(h=>h.middle_lat).length,full=Object.values(hmap).filter(h=>h.front_lat&&h.middle_lat&&h.back_lat).length;
+    if(state.courseReturnView==="roundView"&&state.round){state.round.course=name;state.selectedTee=teeName;renderTeeSelectors();refreshCourseSelect(name);setTeeButton("data-tee",teeName);applyCourseProfileToRound({force:false});show("roundView")}
+    else renderSavedCourseProfiles();
+    alert(`${name} • ${teeName} imported. GPS geometry: ${mapped}/${holesCount} greens mapped; ${full}/${holesCount} with Front/Middle/Back.`);
+  }catch(e){alert(e.message)}
+}
+
 async function searchSharedCourses(){
-  if(!state.supabase||!state.user){alert("Sign in first.");return}const q=$("sharedCourseSearch").value.trim(),root=$("sharedCourseResults");root.innerHTML=`<p class="muted">Searching…</p>`;
+  if(!state.supabase||!state.user){alert("Sign in first.");return}const q=$("sharedCourseSearch").value.trim(),root=$("sharedCourseResults");$("courseSearchStatus").textContent=q?`Searching for “${q}”…`:"Enter a course name.";if(!q)return;root.innerHTML=`<p class="muted">Searching Golf Tracker catalogue…</p>`;searchOnlineCourses(q);
   const {data,error}=await state.supabase.rpc("search_shared_course_catalog",{search_query:q});if(error){root.innerHTML=`<p class="muted">Shared search requires the v6.4 Supabase migration. ${esc(error.message)}</p>`;return}
   root.innerHTML=(data||[]).length?(data||[]).map((c,i)=>`<div class="course-profile-item"><div><strong>${esc(c.name)}</strong><div class="muted">${esc(c.tee_color)} • ${c.holes_count} holes • par ${c.round_par}</div></div><button class="secondary" data-use-shared="${i}">Use</button></div>`).join(""):`<p class="muted">No matching courses found.</p>`;root._sharedResults=data||[];
 }
@@ -344,7 +440,7 @@ function downloadCourseTemplate(){const rows=["course,tee,hole,par,yardage,holes
 
 function startRound(holes){
   state.holes=holes;state.current=1;
-  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:6.8,sg:{enabled:false,benchmark:"Scratch",holes:{}},holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
+  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:6.9,sg:{enabled:false,benchmark:"Scratch",holes:{}},holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
   $("roundDate").value=state.round.date;refreshCourseSelect("");$("holesCount").value=holes;$("roundPar").value=state.round.roundPar;state.selectedTee="White";setTeeButton("data-tee",state.selectedTee);
   loadHole(1);show("roundView");setEntryStep("setup");
 }
@@ -749,6 +845,7 @@ function gpsGreenDistances(pos=state.gpsPosition){
 function renderGpsPlay(){
   if(!state.round)return;const h=gpsHole(),p=gpsCourseHole(),d=gpsGreenDistances();
   $("gpsHoleNumber").textContent=state.current;$("gpsHolePar").textContent=h?.par||p?.par||"—";$("gpsCourseLabel").textContent=`${state.round.course||""} • ${state.selectedTee} tees`;
+  const prof=currentCourseProfile(),hasMid=!!p?.middle_lat,hasFull=!!(p?.front_lat&&p?.middle_lat&&p?.back_lat);$("gpsCourseDataStatus").textContent=hasFull?"Course GPS • Front / Middle / Back":hasMid?"Course GPS • Middle mapped":"Green GPS not available for this hole";
   $("gpsPrevHole").disabled=state.current<=1;$("gpsNextHole").disabled=state.current>=state.holes;
   for(const k of ["Front","Middle","Back"]){const v=d[k.toLowerCase()];$( "gps"+k).textContent=v?Math.round(v):"—"}
   if(state.gpsPosition){$("gpsStatus").textContent="GPS active";$("gpsAccuracy").textContent=`Accuracy ±${Math.round(state.gpsPosition.accuracy)} m`}
@@ -844,7 +941,7 @@ $("syncBtn").onclick=()=>syncAll().catch(e=>alert(e.message));
 $("syncRound").onclick=async()=>{try{const r=getRounds().find(x=>x.id===state.lastSavedId);if(r){await syncOne(r);renderHome();alert("Round saved to the cloud database.")}}catch(e){alert(e.message)}};
 $("addSgFromSummary").onclick=()=>{const id=state.lastSavedId||state.round?.id;if(id)openSgRound(id)};$("sgDuringRound").onclick=openSgDuringRound;
 $("sgBack").onclick=()=>{saveSgRound({silent:true});if(state.sgReturnView==="roundView"){loadHole(state.current);show("roundView");setEntryStep("review")}else{renderHome();show("homeView")}};$("sgSave").onclick=saveSgRound;$("sgSaveBottom").onclick=saveSgRound;$("sgBenchmark").onchange=()=>{state.sgRound.sg.benchmark=$("sgBenchmark").value;renderSgHeader();renderSgHole()};$("sgPrevHole").onclick=()=>{if(state.sgHole>1){state.sgHole--;renderSgHole();renderSgHeader()}};$("sgNextHole").onclick=()=>{if(state.sgHole<state.sgRound.holesCount){state.sgHole++;renderSgHole();renderSgHeader()}};
-$("openDashboard").onclick=openDashboard;$("openBagMap").onclick=()=>{renderBagMap();show("bagMapView")};$("bagMapBack").onclick=()=>{renderHome();show("homeView")};$("saveBagMap").onclick=saveBagMap;$("runSharedCourseSearch").onclick=searchSharedCourses;$("sharedCourseSearch").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();searchSharedCourses()}});$("sharedCourseResults").addEventListener("click",e=>{const b=e.target.closest("[data-use-shared]");if(b)useSharedCourse(Number(b.dataset.useShared))});$("openCourseLibrary").onclick=()=>{state.courseReturnView="homeView";state.libraryTee="White";setTeeButton("data-library-tee",state.libraryTee);renderCourseHoleEditor();renderSavedCourseProfiles();show("courseLibraryView")};$("courseLibraryBack").onclick=()=>{refreshCourseSelect(state.round?.course||"");show(state.courseReturnView||"homeView")};$("libraryHoles").onchange=renderCourseHoleEditor;$("libraryCourseName").addEventListener("change",()=>{renderTeeSelectors();renderCourseHoleEditor()});$("saveCourseProfile").onclick=saveCourseFromEditor;$("importCourseCsv").onclick=importCourseCsv;$("downloadCourseTemplate").onclick=downloadCourseTemplate;$("savedCourseProfiles").addEventListener("click",e=>{const b=e.target.closest("[data-edit-course]");if(!b)return;$("libraryCourseName").value=b.dataset.editCourse;state.libraryTee=rememberCustomTee(b.dataset.editTee);renderTeeSelectors();setTeeButton("data-library-tee",state.libraryTee);const p=mergedCourseProfiles().find(x=>profileKey(x.name,x.tee_color)===profileKey(b.dataset.editCourse,b.dataset.editTee));if(p)$("libraryHoles").value=p.holes_count;renderCourseHoleEditor();window.scrollTo({top:0,behavior:"smooth"})});
+$("openDashboard").onclick=openDashboard;$("openBagMap").onclick=()=>{renderBagMap();show("bagMapView")};$("bagMapBack").onclick=()=>{renderHome();show("homeView")};$("saveBagMap").onclick=saveBagMap;$("runSharedCourseSearch").onclick=searchSharedCourses;$("sharedCourseSearch").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();searchSharedCourses()}});$("sharedCourseResults").addEventListener("click",e=>{const b=e.target.closest("[data-use-shared]");if(b)useSharedCourse(Number(b.dataset.useShared))});$("onlineCourseResults").addEventListener("click",e=>{const c=e.target.closest("[data-online-course]"),t=e.target.closest("[data-import-online-tee]");if(c)loadOnlineCourse(Number(c.dataset.onlineCourse));if(t)importOnlineCourseTee(Number(t.dataset.importOnlineTee))});$("openCourseLibrary").onclick=()=>{state.courseReturnView="homeView";state.libraryTee="White";setTeeButton("data-library-tee",state.libraryTee);renderCourseHoleEditor();renderSavedCourseProfiles();show("courseLibraryView")};$("courseLibraryBack").onclick=()=>{refreshCourseSelect(state.round?.course||"");show(state.courseReturnView||"homeView")};$("libraryHoles").onchange=renderCourseHoleEditor;$("libraryCourseName").addEventListener("change",()=>{renderTeeSelectors();renderCourseHoleEditor()});$("saveCourseProfile").onclick=saveCourseFromEditor;$("importCourseCsv").onclick=importCourseCsv;$("downloadCourseTemplate").onclick=downloadCourseTemplate;$("savedCourseProfiles").addEventListener("click",e=>{const b=e.target.closest("[data-edit-course]");if(!b)return;$("libraryCourseName").value=b.dataset.editCourse;state.libraryTee=rememberCustomTee(b.dataset.editTee);renderTeeSelectors();setTeeButton("data-library-tee",state.libraryTee);const p=mergedCourseProfiles().find(x=>profileKey(x.name,x.tee_color)===profileKey(b.dataset.editCourse,b.dataset.editTee));if(p)$("libraryHoles").value=p.holes_count;renderCourseHoleEditor();window.scrollTo({top:0,behavior:"smooth"})});
 $("openDashboard").onclick=openDashboard;$("dashboardBack").onclick=()=>{renderHome();show("homeView")};$("refreshDashboard").onclick=refreshDashboardView;$("dashboardCourse").onchange=refreshDashboardView;$("dashboardBenchmark").onchange=refreshDashboardView;
 
 

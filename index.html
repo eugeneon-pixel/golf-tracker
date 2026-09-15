@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v6.8</title>
+  <title>Golf Tracker v6.9</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -243,10 +243,13 @@
       <div class="dashboard-top"><button id="courseLibraryBack" class="icon-btn small">‹</button><div><div class="eyebrow">SETUP</div><h2>Course library</h2></div><span></span></div>
       <div class="card hero"><h3>Fast round setup</h3><p class="muted">Save a course once and Golf Tracker can prefill round par, hole par, yardage and club suggestions for each tee.</p></div>
       <div class="card">
-        <h3>Search shared courses</h3>
-        <p class="muted">Search courses configured by other Golf Tracker users. Only course/tee configuration is shared — golfer identity and round data remain private.</p>
-        <div class="inline-control"><input id="sharedCourseSearch" type="search" placeholder="Search course name"><button id="runSharedCourseSearch" class="secondary compact-button">Search</button></div>
+        <h3>Find a course</h3>
+        <p class="muted">Search your Golf Tracker shared catalogue and the online course database together. Online courses can import scorecard, tees and available GPS geometry so GPS Play can work when you travel.</p>
+        <div class="inline-control"><input id="sharedCourseSearch" type="search" placeholder="e.g. Portmarnock"><button id="runSharedCourseSearch" class="secondary compact-button">Search</button></div>
+        <div id="courseSearchStatus" class="muted top-gap"></div>
         <div id="sharedCourseResults" class="recent-list top-gap"></div>
+        <div id="onlineCourseResults" class="recent-list top-gap"></div>
+        <small class="muted">Online catalogue data: OpenGolfAPI / OpenGolf, ODbL. Imported data is cached in your Course Library.</small>
       </div>
       <div class="card">
         <div class="grid2"><div class="field"><label>Course name</label><input id="libraryCourseName" type="text" placeholder="e.g. Howth Golf Club"></div><div class="field"><label>Holes</label><select id="libraryHoles"><option value="18">18</option><option value="9">9</option></select></div></div>
@@ -293,7 +296,7 @@
           <div>
             <div class="eyebrow">GPS PLAY</div>
             <div class="gps-hole-title">Hole <span id="gpsHoleNumber">1</span> • Par <span id="gpsHolePar">4</span></div>
-            <div id="gpsCourseLabel" class="muted"></div>
+            <div id="gpsCourseLabel" class="muted"></div><div id="gpsCourseDataStatus" class="gps-data-status"></div>
           </div>
           <button id="gpsNextHole" class="gps-hole-nav" type="button">›</button>
         </div>
