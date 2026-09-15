@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Golf Tracker" />
-  <title>Golf Tracker v6.7</title>
+  <title>Golf Tracker v6.8</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -134,6 +134,8 @@
           <div class="field"><label>Holes</label><input id="holesCount" type="number" readonly></div>
         </div>
         <div id="courseAutoNote" class="muted"></div>
+        <button id="startGpsPlay" class="primary big gps-start-btn" type="button">📍 Start GPS Play</button>
+        <small class="muted">Simple on-course mode: Tee Shot → At My Ball. You can switch to full entry at any time.</small>
       </div>
 
       <div id="holeNavWrap" class="hole-nav">
@@ -282,6 +284,68 @@
       <div class="card"><button id="syncRound" class="primary big">Save to cloud database</button><button id="backHome" class="secondary big">Back to home</button></div>
     </section>
 
+
+
+    <section id="gpsPlayView" class="view">
+      <div class="gps-play-shell">
+        <div class="gps-topline">
+          <button id="gpsPrevHole" class="gps-hole-nav" type="button">‹</button>
+          <div>
+            <div class="eyebrow">GPS PLAY</div>
+            <div class="gps-hole-title">Hole <span id="gpsHoleNumber">1</span> • Par <span id="gpsHolePar">4</span></div>
+            <div id="gpsCourseLabel" class="muted"></div>
+          </div>
+          <button id="gpsNextHole" class="gps-hole-nav" type="button">›</button>
+        </div>
+
+        <div class="gps-green-card">
+          <div><span>FRONT</span><strong id="gpsFront">—</strong><small>yd</small></div>
+          <div class="gps-middle"><span>MIDDLE</span><strong id="gpsMiddle">—</strong><small>yd</small></div>
+          <div><span>BACK</span><strong id="gpsBack">—</strong><small>yd</small></div>
+        </div>
+
+        <div class="gps-status-card">
+          <div><span id="gpsStatus">GPS ready</span><small id="gpsAccuracy">Waiting for location</small></div>
+          <div id="gpsLastShot" class="gps-last-shot">No shot recorded yet</div>
+        </div>
+
+        <div class="gps-main-actions">
+          <button id="gpsTeeShot" class="gps-action primary" type="button">TEE SHOT</button>
+          <button id="gpsAtBall" class="gps-action primary" type="button">AT MY BALL</button>
+          <button id="gpsSkipManual" class="gps-action secondary" type="button">SKIP / MANUAL</button>
+          <button id="gpsCancel" class="gps-action ghost" type="button">CANCEL</button>
+        </div>
+
+        <div id="gpsManualPanel" class="card gps-manual-panel hidden">
+          <h3>Manual / missed GPS point</h3>
+          <p class="muted">Use this if you forgot to mark the tee or your previous ball position.</p>
+          <div class="grid2">
+            <div class="field"><label>Club</label><select id="gpsManualClub"></select></div>
+            <div class="field"><label>Shot distance (yds)</label><input id="gpsManualDistance" type="number" inputmode="decimal" placeholder="e.g. 245"></div>
+          </div>
+          <div class="grid2">
+            <button id="gpsSaveManual" class="primary" type="button">Save manual shot</button>
+            <button id="gpsCloseManual" class="secondary" type="button">Close</button>
+          </div>
+        </div>
+
+        <div id="gpsGreenMapPanel" class="card gps-manual-panel hidden">
+          <h3>Map this green</h3>
+          <p class="muted">Optional. Stand at each point and capture it once. The saved course can then show Front / Middle / Back distances for this tee.</p>
+          <div class="gps-map-actions">
+            <button type="button" data-map-green="front">Set front</button>
+            <button type="button" data-map-green="middle">Set middle</button>
+            <button type="button" data-map-green="back">Set back</button>
+          </div>
+          <button id="gpsCloseGreenMap" class="secondary" type="button">Close</button>
+        </div>
+
+        <div class="gps-footer-actions">
+          <button id="gpsMapGreen" class="text-button" type="button">Map green</button>
+          <button id="gpsOpenFullEntry" class="text-button" type="button">Full hole entry</button>
+        </div>
+      </div>
+    </section>
 
     <section id="sgView" class="view">
       <div class="dashboard-top"><button id="sgBack" class="icon-btn small">‹</button><div><div class="eyebrow">STROKES GAINED MODE</div><h2 id="sgRoundTitle">Round</h2><div id="sgStatus" class="muted"></div></div><button id="sgSave" class="secondary compact-button">Save</button></div>

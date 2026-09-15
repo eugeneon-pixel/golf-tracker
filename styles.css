@@ -45,3 +45,35 @@
 /* v6.6 authentication + integrations */
 .auth-provider-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.auth-provider{margin-top:0!important}.auth-divider{display:flex;align-items:center;gap:10px;margin:15px 0 12px;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.auth-divider:before,.auth-divider:after{content:"";height:1px;background:var(--line);flex:1}.auth-message{min-height:18px;margin-top:8px}.error-text{color:#9b2c36}.integration-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.integration-heading h3{margin-bottom:4px}.integration-detail{margin:8px 0 12px}.badge.connected{background:var(--greenbg);color:#205f38}.auth-only-button.hidden{display:none!important}
 @media(max-width:460px){.auth-provider-grid{grid-template-columns:1fr}.integration-heading{display:block}.integration-heading .badge{display:inline-block;margin-bottom:8px}}
+
+
+/* v6.8 GPS Play */
+.gps-start-btn{margin-top:14px}
+.gps-play-shell{min-height:calc(100dvh - 28px);display:flex;flex-direction:column;gap:14px;padding:14px 12px 18px;max-width:620px;margin:0 auto}
+.gps-topline{display:grid;grid-template-columns:52px 1fr 52px;align-items:center;text-align:center;gap:8px}
+.gps-hole-nav{height:52px;border-radius:16px;font-size:30px}
+.gps-hole-title{font-size:24px;font-weight:800}
+.gps-green-card{display:grid;grid-template-columns:1fr 1.15fr 1fr;background:var(--card,#fff);border-radius:22px;padding:16px 8px;box-shadow:0 8px 24px rgba(0,0,0,.08);text-align:center}
+.gps-green-card div{display:flex;flex-direction:column;align-items:center}
+.gps-green-card span{font-size:11px;letter-spacing:.08em;font-weight:800;opacity:.65}
+.gps-green-card strong{font-size:34px;line-height:1.05;margin-top:4px}
+.gps-green-card small{font-size:11px;opacity:.65}
+.gps-green-card .gps-middle{border-left:1px solid rgba(120,120,120,.25);border-right:1px solid rgba(120,120,120,.25)}
+.gps-status-card{display:grid;gap:8px;text-align:center;padding:6px 8px}
+.gps-status-card>div:first-child{display:flex;flex-direction:column}
+#gpsStatus{font-weight:800}
+#gpsAccuracy{opacity:.65}
+.gps-last-shot{font-size:18px;font-weight:700}
+.gps-main-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:auto}
+.gps-action{min-height:92px;border-radius:22px;font-size:18px;font-weight:900;letter-spacing:.02em}
+.gps-action.ghost{background:transparent;border:1px solid rgba(120,120,120,.35)}
+.gps-manual-panel{margin:0}
+.gps-map-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.gps-map-actions button{min-height:52px}
+.gps-footer-actions{display:flex;justify-content:space-between;gap:12px;padding:0 4px}
+.text-button{background:transparent;border:0;text-decoration:underline;padding:10px 4px;font-weight:700}
+@media(max-width:430px){
+  .gps-play-shell{padding:10px 10px 14px;gap:10px}
+  .gps-green-card strong{font-size:30px}
+  .gps-action{min-height:82px}
+}
