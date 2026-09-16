@@ -85,3 +85,5 @@
 .gps-data-status{text-align:center;font-size:11px;font-weight:700;opacity:.7;margin-top:2px}
 
 .gps-scorecard-line{display:flex;justify-content:center;gap:12px;font-size:13px;font-weight:800;opacity:.72;margin-top:2px}
+
+.course-preview-table{margin-top:14px;border:1px solid var(--border,#ddd);border-radius:12px;overflow:hidden}.course-preview-head,.course-preview-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;padding:8px 10px;align-items:center}.course-preview-head{font-size:12px;font-weight:800;opacity:.7}.course-preview-row{border-top:1px solid var(--border,#eee)}.course-preview-head span,.course-preview-row span{text-align:center}.import-quality{margin-top:10px;font-weight:800}.import-quality.good{color:#18864b}.import-quality.warn,.warning-text{color:#a15b00;font-weight:700}
