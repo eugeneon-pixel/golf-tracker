@@ -251,7 +251,7 @@ async function syncAll({silent=false}={}){
 
 function show(view){document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));$(view).classList.add("active");window.scrollTo({top:0,behavior:"instant"})}
 function populateClubs(){["teeClub","reteeClub","secondShotClub","approachClub","gpsManualClub"].forEach(id=>$(id).innerHTML=CLUBS.map(c=>`<option>${c}</option>`).join(""))}
-function blankHole(n){return {hole:n,par:4,score:4,penalty:0,holeLengthYds:"",teeClub:"",fairway:"",teeQuality:"",teePenaltyRehit:false,reteeClub:"",reteeFairway:"",reteeQuality:"",reteeHitGreen:false,secondShotYds:"",secondShotClub:"",secondShotLie:"",secondShotHitGreen:false,approachYds:"",approachClub:"",approachLie:"",gir:"",approachMiss:"",approachProximityFt:"",missLeaveYds:"",missLie:"",firstPutt:"",putts:"",scramble:"",firstPuttResult:"",holeOut:false,notes:"",gpsTrack:[],saved:false}}
+function blankHole(n){return {hole:n,par:4,score:4,penalty:0,holeLengthYds:"",strokeIndex:"",teeClub:"",fairway:"",teeQuality:"",teePenaltyRehit:false,reteeClub:"",reteeFairway:"",reteeQuality:"",reteeHitGreen:false,secondShotYds:"",secondShotClub:"",secondShotLie:"",secondShotHitGreen:false,approachYds:"",approachClub:"",approachLie:"",gir:"",approachMiss:"",approachProximityFt:"",missLeaveYds:"",missLie:"",firstPutt:"",putts:"",scramble:"",firstPuttResult:"",holeOut:false,notes:"",gpsTrack:[],saved:false}}
 
 
 function inferredCourseProfiles(){
@@ -275,7 +275,7 @@ function applyCourseProfileToRound({force=false}={}){
   if(!p){$("courseAutoNote").textContent="New course/tee — values you enter will be learned for future rounds.";return}
   const holes=Number(state.round.holesCount)||18;const ph=Array.from({length:holes},(_,i)=>p.holes?.[i+1]).filter(Boolean);const rp=ph.length?ph.reduce((a,h)=>a+Number(h.par||0),0):(Number(p.round_par)||state.round.roundPar);
   state.round.roundPar=rp;$("roundPar").value=rp;
-  for(let i=0;i<holes;i++){const h=state.round.holesData[i],cfg=p.holes?.[i+1];if(!cfg)continue;const oldPar=Number(h.par)||4;if(force||!h.saved){h.par=Number(cfg.par)||oldPar;h.holeLengthYds=cfg.yardage??h.holeLengthYds;if(!h.saved&&(h.score===""||Number(h.score)===oldPar))h.score=h.par}}
+  for(let i=0;i<holes;i++){const h=state.round.holesData[i],cfg=p.holes?.[i+1];if(!cfg)continue;const oldPar=Number(h.par)||4;if(force||!h.saved){h.par=Number(cfg.par)||oldPar;h.holeLengthYds=cfg.yardage??h.holeLengthYds;h.strokeIndex=cfg.stroke_index??h.strokeIndex;if(!h.saved&&(h.score===""||Number(h.score)===oldPar))h.score=h.par}}
   $("courseAutoNote").textContent=`Auto-filled from ${p.source==="history"?"previous rounds":"Course Library"}: ${p.name} • ${p.tee_color} tees.`;
   if(state.current)loadHole(state.current);
 }
@@ -398,9 +398,10 @@ async function importOnlineCourseTee(teeIndex){
   try{
     await saveCourseProfileObject({name,tee_color:teeName,holes_count:holesCount,round_par:roundPar,holes:hmap,source:"opengolf",external_provider:"OpenGolfAPI",external_course_id:String(id)});
     const mapped=Object.values(hmap).filter(h=>h.middle_lat).length,full=Object.values(hmap).filter(h=>h.front_lat&&h.middle_lat&&h.back_lat).length;
+    const yardageCount=Object.values(hmap).filter(h=>Number(h.yardage)>0).length,siCount=Object.values(hmap).filter(h=>Number(h.stroke_index)>0).length;
     if(state.courseReturnView==="roundView"&&state.round){state.round.course=name;state.selectedTee=teeName;renderTeeSelectors();refreshCourseSelect(name);setTeeButton("data-tee",teeName);applyCourseProfileToRound({force:false});show("roundView")}
     else renderSavedCourseProfiles();
-    alert(`${name} • ${teeName} imported. GPS geometry: ${mapped}/${holesCount} greens mapped; ${full}/${holesCount} with Front/Middle/Back.`);
+    alert(`${name} • ${teeName} imported. Scorecard: ${yardageCount}/${holesCount} hole distances; ${siCount}/${holesCount} stroke indexes. GPS: ${mapped}/${holesCount} greens mapped; ${full}/${holesCount} with Front/Middle/Back.`);
   }catch(e){alert(e.message)}
 }
 
@@ -440,7 +441,7 @@ function downloadCourseTemplate(){const rows=["course,tee,hole,par,yardage,holes
 
 function startRound(holes){
   state.holes=holes;state.current=1;
-  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:6.9,sg:{enabled:false,benchmark:"Scratch",holes:{}},holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
+  state.round={id:uid(),createdAt:new Date().toISOString(),date:today(),course:"",holesCount:holes,roundPar:holes===9?36:72,synced:false,schemaVersion:7.0,sg:{enabled:false,benchmark:"Scratch",holes:{}},holesData:Array.from({length:holes},(_,i)=>blankHole(i+1))};
   $("roundDate").value=state.round.date;refreshCourseSelect("");$("holesCount").value=holes;$("roundPar").value=state.round.roundPar;state.selectedTee="White";setTeeButton("data-tee",state.selectedTee);
   loadHole(1);show("roundView");setEntryStep("setup");
 }
@@ -845,6 +846,8 @@ function gpsGreenDistances(pos=state.gpsPosition){
 function renderGpsPlay(){
   if(!state.round)return;const h=gpsHole(),p=gpsCourseHole(),d=gpsGreenDistances();
   $("gpsHoleNumber").textContent=state.current;$("gpsHolePar").textContent=h?.par||p?.par||"—";$("gpsCourseLabel").textContent=`${state.round.course||""} • ${state.selectedTee} tees`;
+  const publishedYards=Number(p?.yardage||h?.holeLengthYds)||null,si=Number(p?.stroke_index||h?.strokeIndex)||null;
+  $("gpsTeeDistance").textContent=publishedYards?`${Math.round(publishedYards)} yd`:"— yd";$("gpsStrokeIndex").textContent=si?`SI ${si}`:"";
   const prof=currentCourseProfile(),hasMid=!!p?.middle_lat,hasFull=!!(p?.front_lat&&p?.middle_lat&&p?.back_lat);$("gpsCourseDataStatus").textContent=hasFull?"Course GPS • Front / Middle / Back":hasMid?"Course GPS • Middle mapped":"Green GPS not available for this hole";
   $("gpsPrevHole").disabled=state.current<=1;$("gpsNextHole").disabled=state.current>=state.holes;
   for(const k of ["Front","Middle","Back"]){const v=d[k.toLowerCase()];$( "gps"+k).textContent=v?Math.round(v):"—"}
